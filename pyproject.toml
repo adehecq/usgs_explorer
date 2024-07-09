@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools >= 61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "usgsxplore"
+version = "0.0.1"
+authors = [
+    {name = "Godin Luc", email = "luc.godin@etu.univ-grenoble-alpes.fr"},
+]
+maintainers = [
+  {name = "Amaury Dehecq", email = "this-is-not-an-email@a.com"}
+]
+description = "Search and download data or scenes from USGS API"
+readme = "README.md"
+requires-python = ">=3.8"
+keywords = ["earth observation","remote sesing", "GIS","satellite imagery", "USGS", "M2M"]
+license = {text = "MIT License"}
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "geopandas",
+    "requests",
+    "tqdm",
+    "shapely"
+]
+
+[project.urls]
+Homepage = "https://github.com/adehecq/usgs_explorer"
+Documentation = "https://github.com/adehecq/usgs_explorer"
+Repository = "https://github.com/adehecq/usgs_explorer"
+Issues = "https://github.com/adehecq/usgs_explorer/issues"
+
+[project.optional-dependencies]
+cli = ["click"]
+tests = ["pytest"]
+
+[project.scripts]
+usgsxplore = "usgsxplore.cli:cli"
+
+[tool.setuptools]
+packages = ["usgsxplore"]
