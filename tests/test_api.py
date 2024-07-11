@@ -87,6 +87,46 @@ class TestAPI:
         scenes = self.api.search("landsat_tm_c2_l1", bbox=(5.7074, 45.1611, 5.7653, 45.2065), date_interval=("2010-01-01","2019-12-31"))
         assert len(scenes) == 27
 
+    def test_process_download_options_declassii(self):
+        "Test the process_download_options with the declassii dataset"
+        unexist_ids = ["unexist_id_1", "unexist_id_2"]
+        unavailable_ids = ["DZB1216-500523L001001", "DZB1216-500523L002001"]
+        available_ids = ["DZB1216-500525L001001", "DZB1216-500525L008001"]
+        downloaded_ids = ["DZB1216-500521L001001"]
+
+        entity_ids = unexist_ids + unavailable_ids + available_ids + downloaded_ids
+
+        with TemporaryDirectory() as tmp_dir:
+            # simulate a images in the output dir
+            with open(os.path.join(tmp_dir, "DZB1216-500521L001001.tgz"), mode="w", encoding="utf-8"):
+                pass
+            res = self.api.process_download_options("declassii", entity_ids, tmp_dir)
+
+            assert set(available_ids) == set(list(res[0].keys()))
+            assert set(downloaded_ids) == set(res[1])
+            assert set(unavailable_ids) == set(res[2])
+            assert set(unexist_ids) == set(res[3])
+
+    def test_process_download_options_landsat(self):
+        "Test the process_download_options with a landsat dataset"
+        unexist_ids = ["unexist_id_1", "unexist_id_2"]
+        available_ids = ["LT50380372012126EDC00", "LT50310332012125EDC00"]
+        downloaded_ids = ["LT50310342012125EDC00"]
+
+        entity_ids = unexist_ids + available_ids + downloaded_ids
+
+        with TemporaryDirectory() as tmp_dir:
+            # simulate a images in the output dir
+            with open(os.path.join(tmp_dir, "LT05_L1TP_031034_20120504_20200820_02_T1.tgz"), mode="w", encoding="utf-8"):
+                pass
+            res = self.api.process_download_options("landsat_tm_c2_l1", entity_ids, tmp_dir)
+
+            assert set(available_ids) == set(list(res[0].keys()))
+            assert set(downloaded_ids) == set(res[1])
+            assert set(unexist_ids) == set(res[3])
+
+
+
 
 class TestFilter:
     """
@@ -193,7 +233,7 @@ class TestFilter:
         #tests for all valid filters
         fields = ["5e839ff8388465fa","Camera Resolution", "camera_resol"]
         values = ["6","2 to 4 feet"]
-        expected_f = {"filterType":"value","filterId":"5e839ff8388465fa","value":"6","operand":"like"}        
+        expected_f = {"filterType":"value","filterId":"5e839ff8388465fa","value":"6","operand":"like"}  
         for field in fields:
             for value in values:
                 f = filt.MetadataValue(field, value)
@@ -225,7 +265,7 @@ class TestFilter:
         filter1.compile(self.dataset_filters)
         assert filter1 == expected_f
 
-        # Test a triple and 
+        # Test a triple and
         filter2 = filter1 & filt.MetadataValue("DOWNLOAD_AVAILABLE","Yes")
         expected_f = {
             "filterType":"and",
@@ -266,7 +306,7 @@ class TestFilter:
 
         assert f == expected_f
 
-    
+
     def test_metadata_filter_from_str(self):
         "Test the from_str constructor for MetadataFilter"
         str_repr = "camera_resol=6 & camera='H' | 'Download Available' = Yes"
@@ -304,3 +344,5 @@ class TestFilter:
 
         sf = filt.SceneFilter.from_args(meta_filter="field=value")
         assert isinstance(sf["metadataFilter"], filt.MetadataFilter)
+
+# End-of-file (EOF)
