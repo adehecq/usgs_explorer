@@ -4,7 +4,6 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "usgsxplore"
-version = "0.0.1"
 authors = [
     {name = "Godin Luc", email = "luc.godin@etu.univ-grenoble-alpes.fr"},
 ]
@@ -14,6 +13,7 @@ maintainers = [
 description = "Search and download data or scenes from USGS API"
 readme = "README.md"
 requires-python = ">=3.8"
+dynamic = ["version"]
 keywords = ["earth observation","remote sesing", "GIS","satellite imagery", "USGS", "M2M"]
 license = {text = "MIT License"}
 classifiers = [
