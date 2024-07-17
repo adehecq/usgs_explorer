@@ -297,8 +297,8 @@ class MetadataValue(MetadataFilter):
                     self["value"] = self._value
 
         if "filterId" not in self:
-            choice = [f["id"] for f in dataset_filters]
-            raise FilterMetadataValueError(f"Invalid metadata filter id '{self._value}', choose one in {"|".join(choice)}")
+            choice_str = "|".join([f["id"] for f in dataset_filters])
+            raise FilterMetadataValueError(f"Invalid metadata filter id '{self._value}', choose one in {choice_str}")
 
 
 
