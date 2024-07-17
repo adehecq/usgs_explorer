@@ -5,8 +5,10 @@ Last modified: 2024
 Author: Luc Godin
 """
 import os
-from shapely import Polygon, MultiPolygon
+
 import geopandas as gpd
+from shapely import MultiPolygon, Polygon
+
 
 def to_gpkg(scenes_metadata: list[dict], geo_file: str = "scenes.gpkg") -> None:
     """
@@ -21,7 +23,6 @@ def to_gpkg(scenes_metadata: list[dict], geo_file: str = "scenes.gpkg") -> None:
 
     # loop in every line of the scenes file
     for scene in scenes_metadata:
-
         geom_type = scene["spatialCoverage"]["type"]
         if geom_type == "Polygon":
             geometries.append(Polygon(scene["spatialCoverage"]["coordinates"][0]))

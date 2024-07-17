@@ -7,21 +7,25 @@ Author: Luc Godin
 """
 
 import json
-from urllib.parse import urljoin
-import string
 import random
-import time
 import signal
+import string
 import sys
-from typing import Generator
-from tqdm import tqdm
+import time
+from collections.abc import Generator
+from urllib.parse import urljoin
 
 import requests
+from tqdm import tqdm
 
-from usgsxplore.scenes_downloader import ScenesDownloader
-from usgsxplore.errors import USGSAuthenticationError, USGSError, USGSRateLimitError, APIInvalidParameters
+from usgsxplore.errors import (
+    APIInvalidParameters,
+    USGSAuthenticationError,
+    USGSError,
+    USGSRateLimitError,
+)
 from usgsxplore.filter import SceneFilter
-
+from usgsxplore.scenes_downloader import ScenesDownloader
 
 API_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 
@@ -29,12 +33,12 @@ API_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 class API:
     """EarthExplorer API."""
 
-    def __init__(self, username: str, password: str|None = None, token: str|None = None) -> None:
+    def __init__(self, username: str, password: str | None = None, token: str | None = None) -> None:
         """EarthExplorer API.
 
         :param username: EarthExplorer username.
         :param password: EarthExplorer password.
-        :param token: EarthExplorer token.  
+        :param token: EarthExplorer token.
         """
         self.url = API_URL
         self.session = requests.Session()
@@ -60,7 +64,7 @@ class API:
                 raise USGSRateLimitError(f"{error_code}: {error_msg}.")
             raise USGSError(f"{error_code}: {error_msg}.")
 
-    def request(self, endpoint: str, params: dict=None) -> dict:
+    def request(self, endpoint: str, params: dict = None) -> dict:
         """Perform a request to the USGS M2M API.
         :param endpoint: API endpoint.
         :param params: API parameters.
@@ -79,12 +83,12 @@ class API:
         self.raise_api_error(r)
         return r.json().get("data")
 
-    def login(self, username: str, password: str|None = None, token: str|None = None) -> None:
+    def login(self, username: str, password: str | None = None, token: str | None = None) -> None:
         """Get an API key. With either the login request or the login-token-request
 
         :param username: EarthExplorer username.
         :param password: EarthExplorer password.
-        :param token: EarthExplorer token. 
+        :param token: EarthExplorer token.
         :raise APIInvalidParameters: if password and token are None.
         :raise USGSAuthenticationError: If the authentification failed
         """
@@ -105,7 +109,7 @@ class API:
         self.request("logout")
         self.session = requests.Session()
 
-    def get_entity_id(self, display_id: str|list[str], dataset: str) -> str|list[str]:
+    def get_entity_id(self, display_id: str | list[str], dataset: str) -> str | list[str]:
         """Get scene ID from product ID.
 
         Note
@@ -117,7 +121,7 @@ class API:
 
         :param display_id: Input display ID. Can also be a list of display IDs.
         :param dataset: Dataset alias.
-        :return: Output entity ID. Can also be a list of entity IDs depending on input. 
+        :return: Output entity ID. Can also be a list of entity IDs depending on input.
         """
         # scene-list-add support both entityId and entityIds input parameters
         param = "entityId"
@@ -186,13 +190,13 @@ class API:
     def search(
         self,
         dataset: str,
-        location: tuple[float, float]|None = None,
-        bbox: tuple[float, float, float, float]|None = None,
-        max_cloud_cover: int|None = None,
-        date_interval: tuple[str,str]|None = None,
-        months: list[int]|None = None,
-        meta_filter: str|None = None,
-        max_results: int|None = None
+        location: tuple[float, float] | None = None,
+        bbox: tuple[float, float, float, float] | None = None,
+        max_cloud_cover: int | None = None,
+        date_interval: tuple[str, str] | None = None,
+        months: list[int] | None = None,
+        meta_filter: str | None = None,
+        max_results: int | None = None,
     ) -> list[dict]:
         """
         Search for scenes, and return a list of all scenes found.
@@ -209,8 +213,12 @@ class API:
         :return: list of scene metadata
         """
         args = {
-            "bbox":bbox, "max_cloud_cover":max_cloud_cover, "months":months,
-            "meta_filter":meta_filter, "location":location, "date_interval":date_interval
+            "bbox": bbox,
+            "max_cloud_cover": max_cloud_cover,
+            "months": months,
+            "meta_filter": meta_filter,
+            "location": location,
+            "date_interval": date_interval,
         }
         scene_filter = SceneFilter.from_args(**args)
         scenes = []
@@ -222,10 +230,10 @@ class API:
         self,
         dataset: str,
         scene_filter: SceneFilter | None = None,
-        max_results: int|None = None,
-        metadata_type: str|None="full",
+        max_results: int | None = None,
+        metadata_type: str | None = "full",
         use_tqdm: bool = True,
-        batch_size: int = 10000
+        batch_size: int = 10000,
     ) -> Generator[list[dict], None, None]:
         """
         Return a Generator with each element is a list of 10000 (batch_size) scenes informations.
@@ -237,7 +245,7 @@ class API:
         :param metadata_type: identifies wich metadata to return (full|summary|None)
         :param use_tqdm: if True display a progress bar of the search
         :param batch_size: number of maxResults of each scene-search
-        :return: generator of scenes informations batch 
+        :return: generator of scenes informations batch
         """
         starting_number = 1
         if use_tqdm:
@@ -253,10 +261,16 @@ class API:
 
             if use_tqdm:
                 p_bar.n = starting_number - 1
-                p_bar.total = max_results if max_results and max_results <= scene_search["totalHits"] else scene_search["totalHits"]
+                p_bar.total = (
+                    max_results
+                    if max_results and max_results <= scene_search["totalHits"]
+                    else scene_search["totalHits"]
+                )
                 p_bar.refresh()
 
-            if (max_results and scene_search["nextRecord"] > max_results) or starting_number == scene_search["totalHits"]:
+            if (max_results and scene_search["nextRecord"] > max_results) or starting_number == scene_search[
+                "totalHits"
+            ]:
                 break
         if use_tqdm:
             p_bar.n = p_bar.total
@@ -266,9 +280,9 @@ class API:
         self,
         dataset: str,
         scene_filter: SceneFilter | None = None,
-        max_results: int=100,
-        starting_number: int=1,
-        metadata_type: str|None="full"
+        max_results: int = 100,
+        starting_number: int = 1,
+        metadata_type: str | None = "full",
     ) -> dict:
         """Search for scenes.
 
@@ -277,7 +291,7 @@ class API:
         :param max_results: Max. number of results. Defaults to 100.
         :param starting_number: starting number of the search. Default 1
         :param metadata_type: identifies wich metadata to return (full|summary|None)
-        :return: Result of the scene-search request. 
+        :return: Result of the scene-search request.
         """
         # we compile the metadataFilter if it exist to format it for the API
         if scene_filter and "metadataFilter" in scene_filter:
@@ -290,19 +304,19 @@ class API:
                 "sceneFilter": scene_filter,
                 "maxResults": max_results,
                 "metadataType": metadata_type,
-                "startingNumber": starting_number
+                "startingNumber": starting_number,
             },
         )
         return r
 
     def download(
-            self,
-            dataset: str,
-            entity_ids: list[str],
-            output_dir: str = ".",
-            max_thread: int = 5,
-            overwrite: bool = False,
-            pbar_type: int = 2
+        self,
+        dataset: str,
+        entity_ids: list[str],
+        output_dir: str = ".",
+        max_thread: int = 5,
+        overwrite: bool = False,
+        pbar_type: int = 2,
     ) -> None:
         """
         Download GTiff images identify from their entity id, use the M2M API. Progress of
@@ -320,25 +334,26 @@ class API:
         scenes_downloader = ScenesDownloader(entity_ids, output_dir, max_thread, pbar_type, overwrite)
 
         # get download-options and send it to the scenes_downloader
-        download_options = self.request("download-options", {"datasetName":dataset, "entityIds":entity_ids})
+        download_options = self.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
         scenes_downloader.set_download_options(download_options)
 
         # send a download-request with parsed products
         download_list = scenes_downloader.get_downloads()
-        request_results = self.request("download-request", {"downloads":download_list,"label": self.label})
+        request_results = self.request("download-request", {"downloads": download_list, "label": self.label})
 
         # defined the ctrl-c signal to stop all downloading thread
         # pylint: disable=unused-argument
         def _handle_sigint(sign, frame):
             scenes_downloader.stop_download()
             sys.exit(0)
+
         signal.signal(signal.SIGINT, _handle_sigint)
 
         # then loop with download-retrieve request every 30 sec to get
         # all download link
         download_ids = []
-        while True :
-            retrieve_results = self.request("download-retrieve", {"label":self.label})
+        while True:
+            retrieve_results = self.request("download-retrieve", {"label": self.label})
 
             # loop in all link "available" and "requested" and download it
             # with the Product.download method
@@ -363,15 +378,17 @@ class API:
         a "download-order-remove", then it do a "download-search" and do a "download-remove" for each download.
         It called by the download method 2 times
         """
-        self.request("download-order-remove",{"label":self.label})
-        download_search = self.request("download-search",{"label":self.label})
+        self.request("download-order-remove", {"label": self.label})
+        download_search = self.request("download-search", {"label": self.label})
         if download_search:
             for dl in download_search:
-                self.request("download-remove",{"downloadId":dl["downloadId"]})
+                self.request("download-remove", {"downloadId": dl["downloadId"]})
+
 
 def _random_string(length=10):
     """Generate a random string."""
     letters = string.ascii_lowercase
     return "".join(random.choice(letters) for i in range(length))
+
 
 # End-of-file (EOF)

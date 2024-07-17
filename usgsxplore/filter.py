@@ -4,18 +4,24 @@ Description: this module contain multiple class for SceneFilter
 Last modified: 2024
 Author: Luc Godin
 """
-from datetime import datetime
 from abc import ABC, abstractmethod
+from datetime import datetime
 from types import UnionType
+
 import geopandas as gpd
 from shapely.geometry import Point, mapping
 from shapely.ops import unary_union
-from usgsxplore.errors import FilterMetadataValueError, AcquisitionFilterError, SceneFilterError, MetadataFilterError
+
+from usgsxplore.errors import (
+    AcquisitionFilterError,
+    FilterMetadataValueError,
+    MetadataFilterError,
+    SceneFilterError,
+)
 
 
 class Coordinate(dict):
-    """A coordinate object as expected by the USGS M2M API.
-    """
+    """A coordinate object as expected by the USGS M2M API."""
 
     def __init__(self, longitude: float, latitude: float) -> None:
         """
@@ -29,11 +35,10 @@ class Coordinate(dict):
 
 
 class GeoJson(dict):
-    """A GeoJSON object as expected by the USGS M2M API.
-    """
+    """A GeoJSON object as expected by the USGS M2M API."""
 
     def __init__(self, shape: dict):
-        """"
+        """ "
         A GeoJSON object as expected by the USGS M2M API.
         :param shape: Input geometry as a geojson-like dict.
         """
@@ -41,16 +46,14 @@ class GeoJson(dict):
         self["coordinates"] = self.transform(shape["type"], shape["coordinates"])
 
     @staticmethod
-    def transform(geom_type: str, coordinates) -> list[list[Coordinate]]|list[Coordinate]|Coordinate:
+    def transform(geom_type: str, coordinates) -> list[list[Coordinate]] | list[Coordinate] | Coordinate:
         """Convert geojson-like coordinates as expected by the USGS M2M API.
         :param geom_type: type of the geometry will be used MultiPolygon|Polygon|LineString|Point
         :param coordinates: coordinate associate to the geom_type
         :return: coordinates as expected by the USGS M2M API
         """
         if geom_type == "MultiPolygon":
-            return [
-                [Coordinate(*point) for point in polygon] for polygon in coordinates[0]
-            ]
+            return [[Coordinate(*point) for point in polygon] for polygon in coordinates[0]]
         if geom_type == "Polygon":
             return [Coordinate(*point) for point in coordinates[0]]
         if geom_type == "LineString":
@@ -61,8 +64,7 @@ class GeoJson(dict):
 
 
 class SpatialFilterMbr(dict):
-    """Bounding box spatial filter.
-    """
+    """Bounding box spatial filter."""
 
     def __init__(self, xmin: float, ymin: float, xmax: float, ymax: float):
         """
@@ -78,8 +80,7 @@ class SpatialFilterMbr(dict):
 
 
 class SpatialFilterGeoJSON(dict):
-    """GeoJSON-based spatial filter.
-    """
+    """GeoJSON-based spatial filter."""
 
     def __init__(self, shape: dict):
         """
@@ -105,8 +106,7 @@ class SpatialFilterGeoJSON(dict):
 
 
 class AcquisitionFilter(dict):
-    """Acquisition date filter.
-    """
+    """Acquisition date filter."""
 
     def __init__(self, start: str, end: str):
         """
@@ -132,18 +132,16 @@ class AcquisitionFilter(dict):
         :return: True if the str_date is in iso 8601 format
         """
         try:
-            datetime.strptime(str_date, '%Y-%m-%d')
+            datetime.strptime(str_date, "%Y-%m-%d")
             return True
         except ValueError:
             return False
 
 
-
 class CloudCoverFilter(dict):
-    """Cloud cover filter.
-    """
+    """Cloud cover filter."""
 
-    def __init__(self, min_cc: int=0, max_cc: int=100, include_unknown: bool=False):
+    def __init__(self, min_cc: int = 0, max_cc: int = 100, include_unknown: bool = False):
         """
         Cloud cover filter.
         :param min_cc: Min. cloud cover in percents (default=0).
@@ -156,10 +154,10 @@ class CloudCoverFilter(dict):
 
 
 class MetadataFilter(dict):
-    """Metadata filter.
-    """
+    """Metadata filter."""
+
     @classmethod
-    def from_str(cls, str_repr: str) -> 'MetadataFilter':
+    def from_str(cls, str_repr: str) -> "MetadataFilter":
         """
         Create an instance of MetadataFilter with a string representation.
         Exemple of string representation : "field1=value1 & field2=value2"
@@ -168,7 +166,7 @@ class MetadataFilter(dict):
         """
         if "&" not in str_repr and "|" not in str_repr:
             return MetadataValue.from_str(str_repr)
-            
+
         for char in str_repr:
             if char == "&":
                 split_str = str_repr.split("&", maxsplit=1)
@@ -176,7 +174,7 @@ class MetadataFilter(dict):
             if char == "|":
                 split_str = str_repr.split("|", maxsplit=1)
                 return MetadataValue.from_str(split_str[0]) | cls.from_str(split_str[1])
-           
+
         raise MetadataFilterError(f"'{str_repr}' is not a valid string representation, ex:camera=H & camera_resol=6 ")
 
     def compile(self, dataset_filters: list[dict]) -> None:
@@ -203,7 +201,7 @@ class MetadataFilter(dict):
             mf_and["childFilters"] = [self, other]
             return mf_and
         return NotImplemented
-    
+
     def __or__(self, other):
         """
         Redefined the __or__ method to create a MetadataOr type.
@@ -224,18 +222,20 @@ class MetadataFilter(dict):
             return mf_or
         return NotImplemented
 
+
 class MetadataValue(MetadataFilter):
     """
     Metadata value
 
     ### Exemple
     ```{python}
-    # when all filter are compiled f1 == f2 == f3 
+    # when all filter are compiled f1 == f2 == f3
     f1 = MetadataValue("5e839ff8388465fa","6")
     f2 = MetadataValue("Camera Resolution","2 to 4 feet")
     f3 = MetadataValue("camera_resol","6")
     ```
     """
+
     def __init__(self, field: str, value: str):
         """
         Metadata value
@@ -246,7 +246,7 @@ class MetadataValue(MetadataFilter):
 
         ### Exemple
         ```{python}
-        # when all filter are compiled f1 == f2 == f3 
+        # when all filter are compiled f1 == f2 == f3
         f1 = MetadataValue("5e839ff8388465fa","6")
         f2 = MetadataValue("Camera Resolution","2 to 4 feet")
         f3 = MetadataValue("camera_resol","6")
@@ -261,10 +261,10 @@ class MetadataValue(MetadataFilter):
             self["operand"] = "="
 
     @classmethod
-    def from_str(cls, str_repr: str) -> 'MetadataValue':
+    def from_str(cls, str_repr: str) -> "MetadataValue":
         """
         Constructor with string representation.
-        The string representation work like this "field=value". 
+        The string representation work like this "field=value".
         You can also add space or guillemet: "field = value", "'field' = 'value'"
 
         :param str_repr: string representation of the MetadataValue ex "camera=H"
@@ -272,8 +272,8 @@ class MetadataValue(MetadataFilter):
         if "=" not in str_repr:
             raise FilterMetadataValueError(f"'{str_repr}' is not a valid string representation, ex:camera=H")
         split_str = str_repr.split("=", maxsplit=1)
-        field = split_str[0].replace('"', "").replace("'","").strip()
-        value = split_str[1].replace('"', "").replace("'","").strip()
+        field = split_str[0].replace('"', "").replace("'", "").strip()
+        value = split_str[1].replace('"', "").replace("'", "").strip()
         return cls(field, value)
 
     def compile(self, dataset_filters: list[dict]) -> None:
@@ -292,7 +292,9 @@ class MetadataValue(MetadataFilter):
                             self["value"] = value
                     if "value" not in self:
                         choice = list(f["valueList"].keys()) + list(f["valueList"].items())
-                        raise FilterMetadataValueError(f"Invalid metadata filter value '{self._value}', choose one in {choice}")
+                        raise FilterMetadataValueError(
+                            f"Invalid metadata filter value '{self._value}', choose one in {choice}"
+                        )
                 else:
                     self["value"] = self._value
 
@@ -301,18 +303,16 @@ class MetadataValue(MetadataFilter):
             raise FilterMetadataValueError(f"Invalid metadata filter id '{self._value}', choose one in {choice_str}")
 
 
-
-
 class SceneFilter(dict):
     """Scene search filter."""
-   
+
     def __init__(
         self,
-        acquisition_filter: AcquisitionFilter|None=None,
-        spatial_filter: SpatialFilterMbr|SpatialFilterGeoJSON|None=None,
-        cloud_cover_filter: CloudCoverFilter|None=None,
-        metadata_filter: MetadataFilter|None=None,
-        months: list[int]|None=None,
+        acquisition_filter: AcquisitionFilter | None = None,
+        spatial_filter: SpatialFilterMbr | SpatialFilterGeoJSON | None = None,
+        cloud_cover_filter: CloudCoverFilter | None = None,
+        metadata_filter: MetadataFilter | None = None,
+        months: list[int] | None = None,
     ):
         """
         Scene search filter.
@@ -346,7 +346,7 @@ class SceneFilter(dict):
         invalid_args = [arg for arg in kwargs if arg not in valid_args]
         if invalid_args:
             raise SceneFilterError(f"Invalid arguments: {', '.join(invalid_args)}")
-        
+
         spatial_filter = None
         if "g_file" in kwargs and kwargs["g_file"]:
             spatial_filter = SpatialFilterGeoJSON.from_file(kwargs["g_file"])
@@ -369,7 +369,4 @@ class SceneFilter(dict):
 
         months = kwargs["months"] if "months" in kwargs else None
 
-        return cls(
-            acquisition_filter, spatial_filter, cloud_cover_filter,
-            metadata_filter, months
-        )
+        return cls(acquisition_filter, spatial_filter, cloud_cover_filter, metadata_filter, months)
