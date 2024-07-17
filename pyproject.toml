@@ -1,44 +1,35 @@
-[build-system]
-requires = ["setuptools >= 61.0"]
-build-backend = "setuptools.build_meta"
-
-[project]
+[tool.poetry]
 name = "usgsxplore"
-authors = [
-    {name = "Godin Luc", email = "luc.godin@etu.univ-grenoble-alpes.fr"},
-]
-maintainers = [
-  {name = "Amaury Dehecq", email = "this-is-not-an-email@a.com"}
-]
+version = "0.1.0"
 description = "Search and download data or scenes from USGS API"
+authors = ["Godin Luc <godin.luc2002@gmail.com>"]
+maintainers = ["Amaury Dehecq <this-is-not-an-email@a.com>"]
+license = "MIT"
 readme = "README.md"
-requires-python = ">=3.8"
-dynamic = ["version"]
+homepage = "https://github.com/adehecq/usgs_explorer"
+repository = "https://github.com/adehecq/usgs_explorer"
+documentation = "https://github.com/adehecq/usgs_explorer"
 keywords = ["earth observation","remote sesing", "GIS","satellite imagery", "USGS", "M2M"]
-license = {text = "MIT License"}
-classifiers = [
-    "Development Status :: 4 - Beta",
-    "Programming Language :: Python :: 3.12",
-]
-dependencies = [
-    "geopandas",
-    "requests",
-    "tqdm",
-    "shapely",
-    "click"
-]
 
-[project.urls]
-Homepage = "https://github.com/adehecq/usgs_explorer"
-Documentation = "https://github.com/adehecq/usgs_explorer"
-Repository = "https://github.com/adehecq/usgs_explorer"
-Issues = "https://github.com/adehecq/usgs_explorer/issues"
 
-[project.optional-dependencies]
-tests = ["pytest"]
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.32.3"
+geopandas = "^1.0.1"
+tqdm = "^4.66.4"
+shapely = "^2.0.5"
+click = "^8.1.7"
 
-[project.scripts]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.2"
+pytest-cov = "^5.0.0"
+flake8 = "^7.1.0"
+pre-commit = "^3.7.1"
+
+[tool.poetry.scripts]
 usgsxplore = "usgsxplore.cli:cli"
 
-[tool.setuptools]
-packages = ["usgsxplore"]
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
