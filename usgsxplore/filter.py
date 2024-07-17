@@ -339,11 +339,10 @@ class SceneFilter(dict):
         """
         Create a SceneFilter instance with kwargs given.
 
-        param kwargs: arguments for filter: longitude, latitude, bbox, g_file, max_cloud_cover, start_date, end_date, months, meta_filter
+        param kwargs: arguments for filter: location, bbox, g_file, max_cloud_cover, date_interval, months, meta_filter
         """
         # first test if all kwargs are valid if not raise an Exception
-        valid_args = ["longitude","latitude", "bbox", "g_file", "max_cloud_cover", "start_date",
-                       "end_date", "months", "meta_filter"]
+        valid_args = ["location", "bbox", "g_file", "max_cloud_cover", "date_interval", "months", "meta_filter"]
         invalid_args = [arg for arg in kwargs if arg not in valid_args]
         if invalid_args:
             raise SceneFilterError(f"Invalid arguments: {', '.join(invalid_args)}")
@@ -351,14 +350,14 @@ class SceneFilter(dict):
         spatial_filter = None
         if "g_file" in kwargs and kwargs["g_file"]:
             spatial_filter = SpatialFilterGeoJSON.from_file(kwargs["g_file"])
-        elif "longitude" in kwargs and "latitude" in kwargs and kwargs["longitude"] and kwargs["latitude"]:
-            spatial_filter = SpatialFilterMbr(*Point(kwargs["longitude"], kwargs["latitude"]).bounds)
+        elif "location" in kwargs and kwargs["location"] and len(kwargs["location"]) == 2:
+            spatial_filter = SpatialFilterMbr(*Point(*kwargs["location"]).bounds)
         elif "bbox" in kwargs and kwargs["bbox"]:
             spatial_filter = SpatialFilterMbr(*kwargs["bbox"])
 
         acquisition_filter = None
-        if "start_date" in kwargs and "end_date" in kwargs and kwargs["start_date"] and kwargs["end_date"]:
-            acquisition_filter = AcquisitionFilter(kwargs["start_date"], kwargs["end_date"])
+        if "date_interval" in kwargs and kwargs["date_interval"] and len(kwargs["date_interval"]) == 2:
+            acquisition_filter = AcquisitionFilter(*kwargs["date_interval"])
 
         cloud_cover_filter = None
         if "max_cloud_cover" in kwargs and kwargs["max_cloud_cover"]:

@@ -24,7 +24,8 @@ dependencies = [
     "geopandas",
     "requests",
     "tqdm",
-    "shapely"
+    "shapely",
+    "click"
 ]
 
 [project.urls]
@@ -34,7 +35,6 @@ Repository = "https://github.com/adehecq/usgs_explorer"
 Issues = "https://github.com/adehecq/usgs_explorer/issues"
 
 [project.optional-dependencies]
-cli = ["click"]
 tests = ["pytest"]
 
 [project.scripts]

@@ -11,14 +11,14 @@ from urllib.parse import urljoin
 import string
 import random
 import time
-import os
 import signal
+import sys
 from typing import Generator
 from tqdm import tqdm
 
 import requests
 
-from usgsxplore.downloader.product import Product
+from usgsxplore.scenes_downloader import ScenesDownloader
 from usgsxplore.errors import USGSAuthenticationError, USGSError, USGSRateLimitError, APIInvalidParameters
 from usgsxplore.filter import SceneFilter
 
@@ -206,16 +206,12 @@ class API:
         :param months: Limit results to specific months (1-12).
         :param meta_filter: String representation of metadata filter ex: camera=L
         :param max_results: Max. number of results. Return all if not provided
+        :return: list of scene metadata
         """
         args = {
             "bbox":bbox, "max_cloud_cover":max_cloud_cover, "months":months,
-            "meta_filter":meta_filter
+            "meta_filter":meta_filter, "location":location, "date_interval":date_interval
         }
-        if location:
-            args.update({"longitude":location[0], "latitude":location[1]})
-        if date_interval:
-            args.update({"start_date":date_interval[0], "end_date":date_interval[1]})
-
         scene_filter = SceneFilter.from_args(**args)
         scenes = []
         for batch_scenes in self.batch_search(dataset, scene_filter, max_results):
@@ -299,32 +295,43 @@ class API:
         )
         return r
 
-    def download(self, dataset: str, entity_ids: list[str], output_dir: str = ".", p_bar_type: int = 2) -> None:
+    def download(
+            self,
+            dataset: str,
+            entity_ids: list[str],
+            output_dir: str = ".",
+            max_thread: int = 5,
+            overwrite: bool = False,
+            pbar_type: int = 2
+    ) -> None:
         """
-        Download GTiff images identify from their entity id, use the M2M API. This method
-        can display progression and recap in terms of the verbosity given.
+        Download GTiff images identify from their entity id, use the M2M API. Progress of
+        the downloading can be displayed in terms of the p_bar_type given.
 
         :param dataset: Alias dataset of scenes wanted
         :param entity_ids: list of entity id of scenes wanted
         :param output_dir: output directory to store GTiff images
+        :param max_thread: maximum number of thread that would be used for the downloading
+        :param p_bar_type: way to display progress bar (0: no pbar, 1: one pbar, 2: pbar for each scenes)
         """
+        # first clean the residus of previous download
+        self.clean_download()
 
-        # first get the download-option with the process_download_options method
-        products, downloaded_ids, unavailable_ids, unmatch_ids = self.process_download_options(dataset, entity_ids, output_dir)
+        scenes_downloader = ScenesDownloader(entity_ids, output_dir, max_thread, pbar_type, overwrite)
 
-        # next remove all the last download-request and download
-        # to start a new download properly
-        self.request("download-order-remove",{"label":self.label})
-        download_search = self.request("download-search",{"label":self.label})
-        if download_search:
-            for dl in download_search:
-                self.request("download-remove",{"downloadId":dl["downloadId"]})
+        # get download-options and send it to the scenes_downloader
+        download_options = self.request("download-options", {"datasetName":dataset, "entityIds":entity_ids})
+        scenes_downloader.set_download_options(download_options)
 
         # send a download-request with parsed products
-        download_list = [products[entity_id].to_dict() for entity_id in products]
+        download_list = scenes_downloader.get_downloads()
         request_results = self.request("download-request", {"downloads":download_list,"label": self.label})
 
-        # defined the ctrl-c signal to stop all downloading thread 
+        # defined the ctrl-c signal to stop all downloading thread
+        # pylint: disable=unused-argument
+        def _handle_sigint(sign, frame):
+            scenes_downloader.stop_download()
+            sys.exit(0)
         signal.signal(signal.SIGINT, _handle_sigint)
 
         # then loop with download-retrieve request every 30 sec to get
@@ -338,7 +345,7 @@ class API:
             for download in retrieve_results["available"] + retrieve_results["requested"]:
                 if download["downloadId"] not in download_ids:
                     download_ids.append(download["downloadId"])
-                    products[download["entityId"]].download(download["url"], output_dir)
+                    scenes_downloader.download(download["entityId"], download["url"])
 
             # if all the link are not ready yet, sleep 30 sec and loop, else exit from the loop
             if len(download_ids) < (len(download_list) - len(request_results["failed"])):
@@ -347,64 +354,24 @@ class API:
                 break
 
         # cleanup the download order and wait all thread to finish
+        self.clean_download()
+        scenes_downloader.wait_all_thread()
+
+    def clean_download(self) -> None:
+        """
+        This method clean residus of download in the API it first do
+        a "download-order-remove", then it do a "download-search" and do a "download-remove" for each download.
+        It called by the download method 2 times
+        """
         self.request("download-order-remove",{"label":self.label})
-        Product.wait_end_downloading()
-
-    def process_download_options(
-        self, dataset: str, entity_ids: list[str], output_dir: str
-    )-> tuple[dict[str, Product], list[str], list[str], list[str]]:
-        """
-        Process download options to return 4 informations:
-            - products: dict identifie with entity id of product to download
-            - downloaded_ids: list of entity id that already in output_dir
-            - unavailable_ids: list of entity id that are not available
-            - unmatch_ids: list of ids wich not exist in the database
-
-        :param dataset: Dataset alias of the scenes
-        :param entity_ids: entity ids of the scenes
-        :param output_dir: path of the output directory
-        :return: (products, downloaded_ids, unavailable_ids, unmatch_ids)
-        """
-
-        products = {}
-        downloaded_ids = []
-        unavailable_ids = []
-        unmatch_ids = entity_ids.copy()
-        
-        # get the display id of all images already download in the output_dir
-        _downloaded_dids = []
-        for filename in os.listdir(output_dir):
-            if os.path.isfile(os.path.join(output_dir, filename)) and filename.endswith((".tgz",".tar")):
-                _downloaded_dids.append(filename.split(".")[0])
-
-        # do the download-options request
-        download_options = self.request("download-options", {"datasetName":dataset, "entityIds":entity_ids})
-
-        # Process the result of it
-        for download_option in download_options:
-            if download_option["downloadSystem"] in ['dds', 'ls_zip']:
-                unmatch_ids.remove(download_option["entityId"])
-
-                # check if the product is available if not we append it's id to the unavailable_ids
-                if download_option["available"]:
-
-                    # here the product is available, but we also check if it's already download
-                    # if not we append this to products else we append to downloaded_ids
-                    if download_option["displayId"] not in _downloaded_dids:
-                        products[download_option["entityId"]] = Product.from_download_option(download_option)
-                    else:
-                        downloaded_ids.append(download_option["entityId"])
-                else:
-                    unavailable_ids.append(download_option["entityId"])
-        return (products, downloaded_ids, unavailable_ids, unmatch_ids)
+        download_search = self.request("download-search",{"label":self.label})
+        if download_search:
+            for dl in download_search:
+                self.request("download-remove",{"downloadId":dl["downloadId"]})
 
 def _random_string(length=10):
     """Generate a random string."""
     letters = string.ascii_lowercase
     return "".join(random.choice(letters) for i in range(length))
-
-def _handle_sigint(signal, frame):
-    Product.stop_downloading()
-    exit(0)
 
 # End-of-file (EOF)

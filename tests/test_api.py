@@ -1,3 +1,5 @@
+# pylint: disable=protected-access
+# pylint: disable=wrong-import-position
 """
 Description: module contain the unitary tests for the API class
 
@@ -9,7 +11,10 @@ import os
 import sys
 from tempfile import TemporaryDirectory
 import pytest
+import time
+from unittest.mock import patch
 import geopandas as gpd
+import pandas as pd
 from shapely.geometry import Polygon
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -17,6 +22,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from usgsxplore.api import API
 import usgsxplore.errors as err
 import usgsxplore.filter as filt
+from usgsxplore.scenes_downloader import ScenesDownloader, Product
+
 
 class TestAPI:
     """
@@ -25,7 +32,7 @@ class TestAPI:
 
     @classmethod
     def setup_class(cls):
-        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
+        cls.api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
 
     @classmethod
     def teardown_class(cls):
@@ -87,46 +94,157 @@ class TestAPI:
         scenes = self.api.search("landsat_tm_c2_l1", bbox=(5.7074, 45.1611, 5.7653, 45.2065), date_interval=("2010-01-01","2019-12-31"))
         assert len(scenes) == 27
 
-    def test_process_download_options_declassii(self):
-        "Test the process_download_options with the declassii dataset"
-        unexist_ids = ["unexist_id_1", "unexist_id_2"]
-        unavailable_ids = ["DZB1216-500523L001001", "DZB1216-500523L002001"]
-        available_ids = ["DZB1216-500525L001001", "DZB1216-500525L008001"]
-        downloaded_ids = ["DZB1216-500521L001001"]
 
-        entity_ids = unexist_ids + unavailable_ids + available_ids + downloaded_ids
+class TestScenesDownloader:
+    """
+    This class test the ScenesDownloader class, it need an open API instance
+    """
+    testing_df = pd.DataFrame({
+        "product_id":["pi_1", "pi_2","pi_3", None],
+        "display_id":["di_1", "di_2","di_3", None],
+        "filesize":[100, 200, 0, None],
+        "url":["url_1", None, None, None],
+        "progress":[70,0,0,0],
+        "file_path":["", None, None, None]
+    }, index=["ei_1","ei_2","ei_3","ei_4"])
+
+    @classmethod
+    def setup_class(cls):
+        cls.api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
+
+    @classmethod
+    def teardown_class(cls):
+        cls.api.logout()
+
+    def test_set_download_options_1(self) -> None:
+        """
+        Test the method ScenesDownloader.set_download_options with the declassi dataset
+        """
+        expected_res = {
+            "DZB1216-500525L001001": Product.STATE_NO_LINK,
+            "DZB1216-500525L008001": Product.STATE_NO_LINK,
+            "DZB1216-500523L001001": Product.STATE_UNAVAILABLE,
+            "DZB1216-500523L002001": Product.STATE_UNAVAILABLE,
+            "unexist_id_1": Product.STATE_UNEXIST,
+            "unexist_id_2": Product.STATE_UNEXIST,
+            "DZB1216-500521L001001":Product.STATE_ALREADY_DL
+        }
+        entity_ids = list(expected_res.keys())
 
         with TemporaryDirectory() as tmp_dir:
-            # simulate a images in the output dir
+            scenes_downloader = ScenesDownloader(entity_ids, tmp_dir, pbar_type=0)
+
+            # create a tgz file to simulate an existing downloading
             with open(os.path.join(tmp_dir, "DZB1216-500521L001001.tgz"), mode="w", encoding="utf-8"):
                 pass
-            res = self.api.process_download_options("declassii", entity_ids, tmp_dir)
 
-            assert set(available_ids) == set(list(res[0].keys()))
-            assert set(downloaded_ids) == set(res[1])
-            assert set(unavailable_ids) == set(res[2])
-            assert set(unexist_ids) == set(res[3])
+            # do a download-options request and give the result to the ScenesDownloader instance
+            download_options = self.api.request("download-options", {"datasetName":"declassii", "entityIds":entity_ids})
+            scenes_downloader.set_download_options(download_options)
 
-    def test_process_download_options_landsat(self):
-        "Test the process_download_options with a landsat dataset"
-        unexist_ids = ["unexist_id_1", "unexist_id_2"]
-        available_ids = ["LT50380372012126EDC00", "LT50310332012125EDC00"]
-        downloaded_ids = ["LT50310342012125EDC00"]
+            # align series to compare it
+            s1, s2 = scenes_downloader.get_states().align(pd.Series(expected_res))
+            # test if the scenes states correspond to the expected_res
+            assert sum(s1 == s2) == 7
 
-        entity_ids = unexist_ids + available_ids + downloaded_ids
+    def test_set_download_options_2(self) -> None:
+        """
+        Test the method ScenesDownloader.set_download_options with a landsat dataset
+        """
+        expected_res = {
+            "LT50380372012126EDC00": Product.STATE_NO_LINK,
+            "LT50310332012125EDC00": Product.STATE_NO_LINK,
+            "unexist_id_1": Product.STATE_UNEXIST,
+            "unexist_id_2": Product.STATE_UNEXIST,
+            "LT50310342012125EDC00":Product.STATE_ALREADY_DL
+        }
+        entity_ids = list(expected_res.keys())
 
         with TemporaryDirectory() as tmp_dir:
-            # simulate a images in the output dir
-            with open(os.path.join(tmp_dir, "LT05_L1TP_031034_20120504_20200820_02_T1.tgz"), mode="w", encoding="utf-8"):
+            scenes_downloader = ScenesDownloader(entity_ids, tmp_dir, pbar_type=0)
+
+            # create a tgz file to simulate an existing downloading
+            with open(os.path.join(tmp_dir, "LT05_L1TP_031034_20120504_20200820_02_T1.tar"), mode="w", encoding="utf-8"):
                 pass
-            res = self.api.process_download_options("landsat_tm_c2_l1", entity_ids, tmp_dir)
 
-            assert set(available_ids) == set(list(res[0].keys()))
-            assert set(downloaded_ids) == set(res[1])
-            assert set(unexist_ids) == set(res[3])
-
+            # do a download-options request and give the result to the ScenesDownloader instance
+            download_options = self.api.request("download-options", {"datasetName":"landsat_tm_c2_l1", "entityIds":entity_ids})
+            scenes_downloader.set_download_options(download_options)
 
 
+            # align series to compare it
+            s1, s2 = scenes_downloader.get_states().align(pd.Series(expected_res))
+            # test if the scenes states correspond to the expected_res
+            assert sum(s1 == s2) == 5
+
+    def test_pbar_0(self) -> None:
+        "Test the progress bar with the pbar_type == 0"
+        sd = ScenesDownloader(self.testing_df.index.to_list(), "", pbar_type=0, overwrite=True)
+        sd.df = self.testing_df
+        sd._init_pbar()
+        assert sd._progress.static_pbar is None
+        assert sd._progress.pbars is None
+
+    def test_pbar_1(self) -> None:
+        "Test the progress bar with the pbar_type == 1"
+        sd = ScenesDownloader(self.testing_df.index.to_list(), "", pbar_type=1, overwrite=True)
+        sd.df = self.testing_df.copy()
+        sd._init_pbar()
+        assert sd._progress.pbars is None
+        assert sd._progress.static_pbar.total == 300
+        assert sd._progress.static_pbar.desc == "Downloading 0/2: "
+
+        # simulate a finishing download
+        sd.df.loc["ei_1", "progress"] = sd.df.loc["ei_1", "filesize"]
+        sd._update_pbar()
+        assert sd._progress.static_pbar.desc == "Downloading 1/2: "
+
+    def test_pbar_2(self) -> None:
+        "Test the progress bar with the pbar_type == 2"
+        sd = ScenesDownloader(self.testing_df.index.to_list(), "", pbar_type=2, overwrite=True)
+        sd.df = self.testing_df.copy()
+        sd._init_pbar()
+        assert sd._progress.static_pbar is None
+        assert sd._progress.pbars["ei_1"].total == sd.df.loc["ei_1", "filesize"]
+        assert sd._progress.pbars['ei_2'].total == sd.df.loc["ei_2", "filesize"]
+
+        assert sd._progress.pbars["ei_1"].desc == "ei_1-(downloading): "
+        assert sd._progress.pbars['ei_2'].desc == "ei_2-(no link): "
+
+        # simulate a finishing download
+        sd.df.loc["ei_1", "progress"] = sd.df.loc["ei_1", "filesize"]
+        sd._update_pbar()
+        assert sd._progress.pbars['ei_1'].desc == "ei_1-(downloaded): "
+
+    def test_download_landsat(self) -> None:
+        "Test the API.download method with some landsat scenes"
+        with TemporaryDirectory() as tmp_dir:
+            with patch.object(ScenesDownloader, "wait_all_thread") as mock_wait_all_thread:
+                self.api.download("landsat_tm_c2_l1", ["LT50380372012126EDC00", "LT50310332012125EDC00"],tmp_dir, pbar_type=0)
+                time.sleep(5)
+                assert os.path.exists(os.path.join(tmp_dir, "LT05_L1TP_031033_20120504_20200820_02_T1.tar"))
+                assert os.path.exists(os.path.join(tmp_dir, "LT05_L1TP_038037_20120505_20200820_02_T1.tar"))
+                mock_wait_all_thread.assert_called_once()
+
+    def test_download_declassii(self) -> None:
+        "Test the API.download method with some declassii scenes"
+        with TemporaryDirectory() as tmp_dir:
+            with patch.object(ScenesDownloader, "wait_all_thread") as mock_wait_all_thread:
+                self.api.download("declassii", ["DZB1216-500525L001001", "DZB1216-500525L006001"],tmp_dir, pbar_type=0)
+                time.sleep(5)
+                assert os.path.exists(os.path.join(tmp_dir, "DZB1216-500525L001001.tgz"))
+                assert os.path.exists(os.path.join(tmp_dir, "DZB1216-500525L006001.tgz"))
+                mock_wait_all_thread.assert_called_once()
+
+    def test_download_corona2(self) -> None:
+        "Test the API.download method with some declassii scenes"
+        with TemporaryDirectory() as tmp_dir:
+            with patch.object(ScenesDownloader, "wait_all_thread") as mock_wait_all_thread:
+                self.api.download("corona2", ["DS1117-2086DA003", "DS1117-2086DA004"],tmp_dir, pbar_type=0)
+                time.sleep(5)
+                assert os.path.exists(os.path.join(tmp_dir, "DS1117-2086DA003.tgz"))
+                assert os.path.exists(os.path.join(tmp_dir, "DS1117-2086DA003.tgz"))
+                mock_wait_all_thread.assert_called_once()
 
 class TestFilter:
     """
@@ -233,7 +351,7 @@ class TestFilter:
         #tests for all valid filters
         fields = ["5e839ff8388465fa","Camera Resolution", "camera_resol"]
         values = ["6","2 to 4 feet"]
-        expected_f = {"filterType":"value","filterId":"5e839ff8388465fa","value":"6","operand":"like"}  
+        expected_f = {"filterType":"value","filterId":"5e839ff8388465fa","value":"6","operand":"like"}
         for field in fields:
             for value in values:
                 f = filt.MetadataValue(field, value)
@@ -334,11 +452,11 @@ class TestFilter:
 
     def test_scene_filter(self):
         "Test the scene_filter"
-        sf = filt.SceneFilter.from_args(longitude=18, latitude=18, months=[1,2,3])
+        sf = filt.SceneFilter.from_args(location=(18,18), months=[1,2,3])
         assert isinstance(sf["spatialFilter"], filt.SpatialFilterMbr)
         assert sf["seasonalFilter"] == [1,2,3]
 
-        sf = filt.SceneFilter.from_args(start_date="2020-05-25", end_date="2021-05-25", max_cloud_cover=70)
+        sf = filt.SceneFilter.from_args(date_interval=("2020-05-25","2021-05-25"), max_cloud_cover=70)
         assert isinstance(sf["acquisitionFilter"], filt.AcquisitionFilter)
         assert isinstance(sf["cloudCoverFilter"], filt.CloudCoverFilter)
 
