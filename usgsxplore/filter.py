@@ -4,9 +4,7 @@ Description: this module contain multiple class for SceneFilter
 Last modified: 2024
 Author: Luc Godin
 """
-from abc import ABC, abstractmethod
 from datetime import datetime
-from types import UnionType
 
 import geopandas as gpd
 from shapely.geometry import Point, mapping

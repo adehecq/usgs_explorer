@@ -5,6 +5,7 @@ Last modified: 2024
 Author: Luc Godin
 """
 import os
+import warnings
 
 import geopandas as gpd
 from shapely import MultiPolygon, Polygon
@@ -45,17 +46,38 @@ def to_gpkg(scenes_metadata: list[dict], geo_file: str = "scenes.gpkg") -> None:
             attributes.setdefault("browse_url", []).append(None)
 
     # create geodataframe with attributes and geometries
-    gdf = gpd.GeoDataFrame(data=attributes, geometry=geometries)
+    gdf = gpd.GeoDataFrame(data=attributes, geometry=geometries, crs="EPSG:4326")
 
     # save the geodataframe in a geospatial file
     if geo_file.endswith(".shp"):
-        gdf.to_file(geo_file)
+        # here we ingore warnings that tell us all field are truncated
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message=r"Normalized/laundered field name: '.+' to '.+'")
+            gdf.to_file(geo_file)
     elif geo_file.endswith(".gpkg"):
         gdf.to_file(geo_file, driver="GPKG")
     elif geo_file.endswith(".geojson"):
         gdf.to_file(geo_file, driver="GeoJSON")
     else:
         raise ValueError(f"The file '{geo_file}' need to end with : .shp|.gpkg|.geojson")
+
+
+def read_textfile(textfile: str) -> list[str]:
+    """
+    This function read a textfile and return a list of ids found in the textfile,
+    without comment line
+
+    :param textfile: path of the textfile
+    """
+    list_ids = []
+
+    with open(textfile, encoding="utf-8") as file:
+        # loop in other line and don't take the comment
+        for line in file:
+            if not line.strip().startswith("#"):
+                spl = line.split("#", maxsplit=1)
+                list_ids.append(spl[0].strip())
+    return list_ids
 
 
 # End-of-file (EOF)
