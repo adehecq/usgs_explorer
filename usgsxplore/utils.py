@@ -6,6 +6,7 @@ Author: Luc Godin
 """
 import os
 import warnings
+from difflib import SequenceMatcher
 
 import geopandas as gpd
 from shapely import MultiPolygon, Polygon
@@ -78,6 +79,22 @@ def read_textfile(textfile: str) -> list[str]:
                 spl = line.split("#", maxsplit=1)
                 list_ids.append(spl[0].strip())
     return list_ids
+
+
+def sort_strings_by_similarity(ref_str: str, list_str: list[str]) -> list[str]:
+    """
+    This function return the list_str given sorted in terms of string similarity with the ref_str.
+
+    :param ref_str: reference string for sort the list
+    :param list_str: list of string to be sorted
+    """
+    # Calculate similarity score for each string in list_str with ref_str
+    similarity_scores = [SequenceMatcher(None, ref_str, str_).ratio() for str_ in list_str]
+
+    # Sort list_str based on similarity scores
+    sorted_list_str = [str_ for _, str_ in sorted(zip(similarity_scores, list_str), reverse=True)]
+
+    return sorted_list_str
 
 
 # End-of-file (EOF)

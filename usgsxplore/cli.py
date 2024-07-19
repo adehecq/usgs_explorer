@@ -1,4 +1,5 @@
 # pylint: disable=too-many-locals
+# pylint: disable=unused-argument
 """
 Description: Command line interface of the usgsxplore
 
@@ -10,19 +11,32 @@ import json
 import click
 
 from usgsxplore.api import API
+from usgsxplore.errors import USGSInvalidDataset
 from usgsxplore.filter import SceneFilter
-from usgsxplore.utils import read_textfile, to_gpkg
+from usgsxplore.utils import read_textfile, sort_strings_by_similarity, to_gpkg
 
 
 # ----------------------------------------------------------------------------------------------------
 # 									CALLBACK FUNCTIONS
 # ----------------------------------------------------------------------------------------------------
 def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    """
+    Callback use to check the format of the output file of the search command.
+    """
+    if value is None:
+        return None
     formats = (".txt", ".json", ".gpkg", ".shp", ".geojson")
     if not value.endswith(formats):
         choices = " | ".join(formats)
         raise click.BadParameter(f"'{value}' file format must be in {choices}")
     return value
+
+
+def check_log(ctx: click.Context, param: click.Parameter, value: str | None) -> str:
+    if value is not None:
+        return value
+    if ctx.params.get("password") is None:
+        raise click.ClickException("Missing argument -p, --password or -t, --token")
 
 
 def read_dataset_textfile(ctx: click.Context, param: click.Parameter, value: str | None):
@@ -60,7 +74,8 @@ def is_text_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
 @click.group()
 def cli() -> None:
     """
-    Command line interface of the usgsxplore
+    Command line interface of the usgsxplore.
+    Documentation : https://github.com/adehecq/usgs_explorer
     """
 
 
@@ -68,12 +83,20 @@ def cli() -> None:
 # 									SEARCH COMMAND
 # ----------------------------------------------------------------------------------------------------
 @click.command()
-@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGSXPLORE_USERNAME")
+@click.option(
+    "-u", "--username", type=click.STRING, required=True, help="EarthExplorer username.", envvar="USGSXPLORE_USERNAME"
+)
 @click.option(
     "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGSXPLORE_PASSWORD"
 )
 @click.option(
-    "-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGSXPLORE_TOKEN"
+    "-t",
+    "--token",
+    type=click.STRING,
+    help="EarthExplorer token.",
+    required=False,
+    envvar="USGSXPLORE_TOKEN",
+    callback=check_log,
 )
 @click.argument("dataset", type=click.STRING)
 @click.option(
@@ -125,53 +148,43 @@ def search(
     """
     Use the API class to search scenes in a dataset, and save the result in multiple format.
     If output is None just print entity ids of scenes, else save the result in the output file.
-    All thoses format are accepted:
-    - textfile (.txt) : save all entity ids into the textfile
-    - json (.json) : save all scenes metadata into the json file
-    - geopackage (.gpkg) : save all scenes metadata into the geopackage file using EPSG:4326
-    - shapefile (.shp) : save all scenes metadata into the shapefile file using EPSG:4326
-    - geojson (.geojson) : save all scenes metadata into the geojson file using EPSG:4326
-
-    :param username: USGS username can be take in env at "USGSXPLORE_USERNAME"
-    :param password: USGS password can be take in env at "USGSXPLORE_PASSWORD"
-    :param token: USGS token can be take in env at "USGSXPLORE_TOKEN"
-    :param dataset: dataset name for the search
-    :param output: Output file : (txt, json, gpkg, shp, geojson)
-    :param location: Point of interest (longitude, latitude).
-    :param bbox: Bounding box (xmin, ymin, xmax, ymax).
-    :param clouds: Max. cloud cover (1-100).
-    :param interval_date: Date interval (start, end), (YYYY-MM-DD, YYYY-MM-DD).
-    :param filter: String representation of metadata filter
-    :param limit: Max. results returned. Return all by default
-    :param pbar: Display a progress bar
     """
     api = API(username, password=password, token=token)
     scene_filter = SceneFilter.from_args(
         location=location, bbox=bbox, max_cloud_cover=clouds, date_interval=interval_date, meta_filter=filter
     )
-    if output is None:
-        for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
-            for scene in batch_scenes:
-                click.echo(scene["entityId"])
 
-    else:
-        if output.endswith(".txt"):
-            with open(output, "w", encoding="utf-8") as file:
-                file.write(f"#dataset={dataset}\n")
-                for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
-                    for scene in batch_scenes:
-                        file.write(scene["entityId"] + "\n")
-        elif output.endswith(".json"):
-            with open(output, "w", encoding="utf-8") as file:
+    try:
+        if output is None:
+            for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+                for scene in batch_scenes:
+                    click.echo(scene["entityId"])
+
+        else:
+            if output.endswith(".txt"):
+                with open(output, "w", encoding="utf-8") as file:
+                    file.write(f"#dataset={dataset}\n")
+                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+                        for scene in batch_scenes:
+                            file.write(scene["entityId"] + "\n")
+            elif output.endswith(".json"):
+                with open(output, "w", encoding="utf-8") as file:
+                    scenes = []
+                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+                        scenes += batch_scenes
+                    json.dump(scenes, file, indent=4)
+            elif output.endswith((".gpkg", ".geojson", "shp")):
                 scenes = []
-                for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+                for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
                     scenes += batch_scenes
-                json.dump(scenes, file, indent=4)
-        elif output.endswith((".gpkg", ".geojson", "shp")):
-            scenes = []
-            for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
-                scenes += batch_scenes
-            to_gpkg(scenes, output)
+                to_gpkg(scenes, output)
+
+    # if dataset is invalid print a list of similar dataset for the user
+    except USGSInvalidDataset:
+        datasets = api.dataset_names()
+        sorted_datasets = sort_strings_by_similarity(dataset, datasets)[:50]
+        choices = " | ".join(sorted_datasets)
+        click.echo(f"Invalid dataset : '{dataset}', it must be in :\n {choices}")
 
     api.logout()
 
@@ -205,17 +218,8 @@ def download(
     overwrite: bool,
 ) -> None:
     """
-    Download scenes with their entity ids provided in the textfile. The dataset must be provided.
-
-    :param username: USGS username can be take in env at "USGSXPLORE_USERNAME"
-    :param password: USGS password can be take in env at "USGSXPLORE_PASSWORD"
-    :param token: USGS token can be take in env at "USGSXPLORE_TOKEN"
-    :param textfile: path of the text file containing entity ids
-    :param dataset: dataset name of scenes
-    :param output_dir: path of the output directory
-    :param pbar: Type of progression displaying (0,1,2)
-    :param max_thread: maximum number of thread for the downloading
-    :param overwrite: Overwrite existing files
+    Download scenes with their entity ids provided in the textfile.
+    The dataset can also be provide in the first line of the textfile : #dataset=declassii
     """
     api = API(username, password=password, token=token)
     entity_ids = read_textfile(textfile)

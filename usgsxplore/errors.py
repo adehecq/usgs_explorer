@@ -30,6 +30,10 @@ class USGSRateLimitError(Exception):
     """Account does not support multiple requests at a time."""
 
 
+class USGSInvalidDataset(Exception):
+    """The dataset name is invalid"""
+
+
 class APIInvalidParameters(Exception):
     """Invalid paramaters for the API class"""
 
@@ -48,3 +52,7 @@ class AcquisitionFilterError(Exception):
 
 class SceneFilterError(Exception):
     """Error raise by SceneFilter"""
+
+
+class ScenesNotFound(Exception):
+    """Error raise when no scenes are founds"""

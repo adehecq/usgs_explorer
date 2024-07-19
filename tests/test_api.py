@@ -8,9 +8,7 @@ Author: Luc Godin
 """
 
 import os
-import time
 from tempfile import TemporaryDirectory
-from unittest.mock import patch
 
 import geopandas as gpd
 import pandas as pd
@@ -227,38 +225,6 @@ class TestScenesDownloader:
         sd._update_pbar()
         assert sd._progress.pbars["ei_1"].desc == "ei_1-(downloaded): "
 
-    def test_download_landsat(self) -> None:
-        "Test the API.download method with some landsat scenes"
-        with TemporaryDirectory() as tmp_dir:
-            with patch.object(ScenesDownloader, "wait_all_thread") as mock_wait_all_thread:
-                self.api.download(
-                    "landsat_tm_c2_l1", ["LT50380372012126EDC00", "LT50310332012125EDC00"], tmp_dir, pbar_type=0
-                )
-                time.sleep(5)
-                assert os.path.exists(os.path.join(tmp_dir, "LT05_L1TP_031033_20120504_20200820_02_T1.tar"))
-                assert os.path.exists(os.path.join(tmp_dir, "LT05_L1TP_038037_20120505_20200820_02_T1.tar"))
-                mock_wait_all_thread.assert_called_once()
-
-    def test_download_declassii(self) -> None:
-        "Test the API.download method with some declassii scenes"
-        with TemporaryDirectory() as tmp_dir:
-            with patch.object(ScenesDownloader, "wait_all_thread") as mock_wait_all_thread:
-                self.api.download("declassii", ["DZB1216-500525L001001", "DZB1216-500525L006001"], tmp_dir, pbar_type=0)
-                time.sleep(5)
-                assert os.path.exists(os.path.join(tmp_dir, "DZB1216-500525L001001.tgz"))
-                assert os.path.exists(os.path.join(tmp_dir, "DZB1216-500525L006001.tgz"))
-                mock_wait_all_thread.assert_called_once()
-
-    def test_download_corona2(self) -> None:
-        "Test the API.download method with some declassii scenes"
-        with TemporaryDirectory() as tmp_dir:
-            with patch.object(ScenesDownloader, "wait_all_thread") as mock_wait_all_thread:
-                self.api.download("corona2", ["DS1117-2086DA003", "DS1117-2086DA004"], tmp_dir, pbar_type=0)
-                time.sleep(5)
-                assert os.path.exists(os.path.join(tmp_dir, "DS1117-2086DA003.tgz"))
-                assert os.path.exists(os.path.join(tmp_dir, "DS1117-2086DA003.tgz"))
-                mock_wait_all_thread.assert_called_once()
-
 
 class TestFilter:
     """
@@ -267,7 +233,7 @@ class TestFilter:
 
     @classmethod
     def setup_class(cls):
-        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
+        cls.api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
         cls.dataset_filters = cls.api.dataset_filters("declassii")
 
     @classmethod

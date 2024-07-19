@@ -79,6 +79,7 @@ class ScenesDownloader:
         """
         res = []
         selected_cols = self.df.loc[self.get_states() == Product.STATE_NO_LINK]
+
         for entity_id, row in selected_cols.iterrows():
             res.append({"entityId": entity_id, "productId": row["product_id"]})
         return res

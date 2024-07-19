@@ -20,8 +20,10 @@ from tqdm import tqdm
 
 from usgsxplore.errors import (
     APIInvalidParameters,
+    ScenesNotFound,
     USGSAuthenticationError,
     USGSError,
+    USGSInvalidDataset,
     USGSRateLimitError,
 )
 from usgsxplore.filter import SceneFilter
@@ -62,6 +64,8 @@ class API:
                 raise USGSAuthenticationError(f"{error_code}: {error_msg}.")
             if error_code == "RATE_LIMIT":
                 raise USGSRateLimitError(f"{error_code}: {error_msg}.")
+            if error_code == "DATASET_INVALID":
+                raise USGSInvalidDataset(f"{error_code}: {error_msg}.")
             raise USGSError(f"{error_code}: {error_msg}.")
 
     def request(self, endpoint: str, params: dict = None) -> dict:
@@ -186,6 +190,13 @@ class API:
         :return: result of the dataset-filters request
         """
         return self.request("dataset-filters", {"datasetName": dataset})
+
+    def dataset_names(self) -> list[str]:
+        """
+        Return a list of all existing dataset
+        """
+        list_dataset = self.request("dataset-search")
+        return [dataset["datasetAlias"] for dataset in list_dataset]
 
     def search(
         self,
@@ -335,6 +346,8 @@ class API:
 
         # get download-options and send it to the scenes_downloader
         download_options = self.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
+        if download_options is None:
+            raise ScenesNotFound(f"No scenes found in the dataset '{dataset}'.")
         scenes_downloader.set_download_options(download_options)
 
         # send a download-request with parsed products
