@@ -54,7 +54,7 @@ def test_landsat_tm_c2_l1(api) -> None:
             api.download("landsat_tm_c2_l1", ["LT50380372012126EDC00"], tmp_dir, pbar_type=0)
 
             time.sleep(2)
-            assert os.path.exists(os.path.join(tmp_dir, "LT05_L1TP_031033_20120504_20200820_02_T1.tar"))
+            assert os.path.exists(os.path.join(tmp_dir, "LT05_L1TP_038037_20120505_20200820_02_T1.tar"))
             mock_wait_all_thread.assert_called_once()
 
 

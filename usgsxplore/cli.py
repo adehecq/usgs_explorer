@@ -146,8 +146,7 @@ def search(
     pbar: bool,
 ) -> None:
     """
-    Use the API class to search scenes in a dataset, and save the result in multiple format.
-    If output is None just print entity ids of scenes, else save the result in the output file.
+    Search scenes in a dataset with filters.
     """
     api = API(username, password=password, token=token)
     scene_filter = SceneFilter.from_args(
@@ -204,7 +203,7 @@ def search(
 @click.option("--dataset", "-d", type=click.STRING, required=False, help="Dataset", callback=read_dataset_textfile)
 @click.option("--output-dir", "-o", type=click.Path(dir_okay=True), default=".", help="Output directory")
 @click.option("--pbar", "-b", type=click.IntRange(0, 2), default=2, help="Type of progression displaying (0,1,2)")
-@click.option("--max-thread", "-m", type=click.INT, default=5)
+@click.option("--max-thread", "-m", type=click.INT, default=5, help="Max thread number (default: 5)")
 @click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files")
 def download(
     username: str,

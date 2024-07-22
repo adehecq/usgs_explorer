@@ -1,7 +1,7 @@
 # pylint: disable=protected-access
 # pylint: disable=wrong-import-position
 """
-Description: module contain the unitary tests for the API class
+Description: module contain the unitary tests for classes: API, ScenesDownloader, all filter classes
 
 Last modified: 2024
 Author: Luc Godin

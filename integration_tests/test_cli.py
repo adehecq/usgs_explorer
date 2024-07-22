@@ -7,13 +7,14 @@ Author: Luc Godin
 import os
 from tempfile import TemporaryDirectory
 
+import pytest
 from click.testing import CliRunner
 
 from usgsxplore.cli import cli
 
 
-def test_search():
-    """Test the search command"""
+def test_search_no_output():
+    """Test the search command with no --output"""
     runner = CliRunner()
     result = runner.invoke(
         cli,
@@ -22,6 +23,39 @@ def test_search():
     assert result.exit_code == 0
     assert "DZB1212-500010L002001" in result.output
     assert "DZB1212-500010L003001" in result.output
+
+
+def test_search_output():
+    """Test the search command with --output of any format"""
+    with TemporaryDirectory() as tmpdir:
+        textfile = os.path.join(tmpdir, "tmp.txt")
+        jsonfile = os.path.join(tmpdir, "tmp.json")
+        gpkgfile = os.path.join(tmpdir, "tmp.gpkg")
+        shapefile = os.path.join(tmpdir, "tmp.shp")
+        geojsonfile = os.path.join(tmpdir, "tmp.geojson")
+
+        # execute all command
+        result1 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", textfile])
+        result2 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", jsonfile])
+        result3 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", gpkgfile])
+        with pytest.warns(UserWarning):
+            result4 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", shapefile])
+        result5 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", geojsonfile])
+        result6 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", "tmp.html"])
+
+        # assertions
+        assert result1.exit_code == 0
+        assert result2.exit_code == 0
+        assert result3.exit_code == 0
+        assert result4.exit_code == 0
+        assert result5.exit_code == 0
+        assert result6.exit_code == 2
+
+        assert os.path.exists(textfile)
+        assert os.path.exists(jsonfile)
+        assert os.path.exists(gpkgfile)
+        assert os.path.exists(shapefile)
+        assert os.path.exists(geojsonfile)
 
 
 def test_download():
