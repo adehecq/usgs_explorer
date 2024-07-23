@@ -338,11 +338,11 @@ class TestFilter:
                 assert f == expected_f
 
         # test for all non-valid filters
-        with pytest.raises(err.FilterMetadataValueError):
+        with pytest.raises(err.FilterFieldError):
             f = filt.MetadataValue("unknown_field", "unknown_value")
             f.compile(self.dataset_filters)
 
-        with pytest.raises(err.FilterMetadataValueError):
+        with pytest.raises(err.FilterValueError):
             f = filt.MetadataValue("5e839ff8388465fa", "unknown_value")
             f.compile(self.dataset_filters)
 

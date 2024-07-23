@@ -11,7 +11,7 @@ import json
 import click
 
 from usgsxplore.api import API
-from usgsxplore.errors import USGSInvalidDataset
+from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
 from usgsxplore.filter import SceneFilter
 from usgsxplore.utils import read_textfile, sort_strings_by_similarity, to_gpkg
 
@@ -184,6 +184,9 @@ def search(
         sorted_datasets = sort_strings_by_similarity(dataset, datasets)[:50]
         choices = " | ".join(sorted_datasets)
         click.echo(f"Invalid dataset : '{dataset}', it must be in :\n {choices}")
+    # print only the message when a filter error is raise
+    except (FilterValueError, FilterFieldError) as e:
+        print(e.__class__.__name__, " : ", e)
 
     api.logout()
 
@@ -228,6 +231,12 @@ def download(
 
 cli.add_command(search)
 cli.add_command(download)
+
+
+@click.command()
+def cli_gpkg():
+    click.echo("hello")
+
 
 if __name__ == "__main__":
     cli()

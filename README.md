@@ -8,18 +8,18 @@ This package is highly inspired of [landsatxplore](https://github.com/yannforget
 
 Searching for Landsat scenes that contains the location (5.7074, 45.1611) acquired between 2010-2020.
 
-```
+```bash
 usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
 ```
 
 Search for Hexagon KH-9 scenes. Save the result into a geopackage
 
-```
+```bash
 usgsxplore search declassii --filter "camera=H" --output results.gpkg
 ```
 
 Downloading the 10 first images from landsat_tm_c2_l1
-```
+```bash
 usgsxplore search landsat_tm_c2_l1 --limit 10 --output results.txt
 usgsxplore download results.txt
 ```
@@ -28,7 +28,7 @@ usgsxplore download results.txt
 
 The package can be installed using pip.
 
-```
+```bash
 pip install usgsxplore
 ```
 
@@ -38,7 +38,7 @@ pip install usgsxplore
 
 ## Command-line interface
 
-```
+```bash
 usgsxplore --help
 ```
 
@@ -70,7 +70,7 @@ export USGSXPLORE_PASSWORD=<your_password>
 
 ### Searching
 
-```
+```bash
 usgsxplore search --help
 ```
 
@@ -102,9 +102,24 @@ If the `--output` is not provided, the command will print entity ids of scenes f
 
 The search command work with multiple scene-search so there is no limit of results, but you can fixe one with `--limit`.
 
+If you provide a wrong dataset, a list of 50 datasets with high string similarity will be print.
+
+The `--filter` work like this "`field1=value1 & field2=value2 | field3=value3`". For the field you can put either the filter id, the filter label, or the sql filter. For the value you can put either value or value label. Exemples:
+```bash
+# select scenes of satelites Hexagon KH-9
+# all of those 4 command will give the same results
+usgsxplore search declassii --filter "camera=L"
+usgsxplore search declassii --filter "Camera Type=L"
+usgsxplore search declassii --filter "5e839ff8cfa94807=L"
+usgsxplore search declassii --filter "camera=KH-9 Lower Resolution Mapping Camera"
+
+# select scenes of satelites Hexagon KH-9 if their are downloadable
+usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
+```
+
 ### Downloading
 
-```
+```bash
 usgsxplore download --help
 ```
 ```

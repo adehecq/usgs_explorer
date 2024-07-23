@@ -4,6 +4,7 @@ Description: module contain differents Error class
 Last modified: 2024
 Author: Luc Godin
 """
+import pandas as pd
 
 
 class USGSError(Exception):
@@ -44,6 +45,33 @@ class MetadataFilterError(Exception):
 
 class FilterMetadataValueError(Exception):
     """Error raise by MetadataValue"""
+
+
+class FilterFieldError(Exception):
+    """Error raise when the field value of a filter is incorect"""
+
+    def __init__(self, field: str, field_ids: list[str], field_labels: list[str], field_sql: list[str]) -> None:
+        self.df = pd.DataFrame({"field_id": field_ids, "field_label": field_labels, "sql_field": field_sql})
+        self.field = field
+
+    def __str__(self) -> str:
+        return f"Invalid field '{self.field}', choose one in :\n{str(self.df)}"
+
+
+class FilterValueError(Exception):
+    """Error raise when the value of a filter is incorect"""
+
+    def __init__(self, value: str, values: list[str], value_labels: list[str]) -> None:
+        self.df = pd.DataFrame(
+            {
+                "values": values,
+                "value_labels": value_labels,
+            }
+        )
+        self.value = value
+
+    def __str__(self) -> str:
+        return f"Invalid value '{self.value}', choose one in :\n{str(self.df)}"
 
 
 class AcquisitionFilterError(Exception):

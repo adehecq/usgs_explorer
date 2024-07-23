@@ -12,7 +12,9 @@ from shapely.ops import unary_union
 
 from usgsxplore.errors import (
     AcquisitionFilterError,
+    FilterFieldError,
     FilterMetadataValueError,
+    FilterValueError,
     MetadataFilterError,
     SceneFilterError,
 )
@@ -289,16 +291,19 @@ class MetadataValue(MetadataFilter):
                         if self._value in (value, label):
                             self["value"] = value
                     if "value" not in self:
-                        choice = list(f["valueList"].keys()) + list(f["valueList"].items())
-                        raise FilterMetadataValueError(
-                            f"Invalid metadata filter value '{self._value}', choose one in {choice}"
-                        )
+                        values = list(f["valueList"].keys())
+                        value_labels = list(f["valueList"].values())
+
+                        raise FilterValueError(self._value, values, value_labels)
                 else:
                     self["value"] = self._value
 
         if "filterId" not in self:
-            choice_str = "|".join([f["id"] for f in dataset_filters])
-            raise FilterMetadataValueError(f"Invalid metadata filter id '{self._value}', choose one in {choice_str}")
+            field_ids = [f["id"] for f in dataset_filters]
+            field_labels = [f["fieldLabel"] for f in dataset_filters]
+            field_sql = [f["searchSql"].split(" ", maxsplit=1)[0] for f in dataset_filters]
+
+            raise FilterFieldError(self._field, field_ids, field_labels, field_sql)
 
 
 class SceneFilter(dict):
