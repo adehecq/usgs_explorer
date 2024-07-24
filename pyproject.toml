@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "usgsxplore"
-version = "0.1.0"
+version = "0.0.2"
 description = "Search and download data or scenes from USGS API"
 authors = ["Godin Luc <godin.luc2002@gmail.com>"]
 maintainers = ["Amaury Dehecq <this-is-not-an-email@a.com>"]
