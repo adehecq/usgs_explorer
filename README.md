@@ -1,3 +1,6 @@
+[![Tests](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml/badge.svg)](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml)
+
+
 # Description
 
 The **usgsxplore** Python package provides an interface to the [M2M API](https://m2m.cr.usgs.gov/) to search and donwloads scenes.
