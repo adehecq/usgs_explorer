@@ -37,4 +37,7 @@ jobs:
       run: poetry run flake8 . --max-line-length=127
 
     - name: Run Pytest
+      env:
+        USGSXPLORE_USERNAME: ${{ secrets.USGSXPLORE_USERNAME }}
+        USGSXPLORE_TOKEN: ${{ secrets.USGSXPLORE_TOKEN }}
       run: poetry run pytest tests/
