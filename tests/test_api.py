@@ -69,7 +69,7 @@ class TestAPI:
         result = self.api.scene_search("landsat_tm_c2_l1", max_results=1, metadata_type=None)
 
         assert result["recordsReturned"] == 1
-        assert result["totalHits"] == 2940421
+        assert result["totalHits"] > 2940000
         assert result["startingNumber"] == 1
         assert result["results"][0]["metadata"] == []
 

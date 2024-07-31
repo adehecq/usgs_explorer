@@ -7,13 +7,22 @@ Last modified: 2024
 Author: Luc Godin
 """
 import json
+import os
 
 import click
+import geopandas as gpd
 
 from usgsxplore.api import API
 from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
 from usgsxplore.filter import SceneFilter
-from usgsxplore.utils import read_textfile, sort_strings_by_similarity, to_gpkg
+from usgsxplore.utils import (
+    download_browse_img,
+    read_textfile,
+    save_in_gfile,
+    sort_strings_by_similarity,
+    to_gdf,
+    update_gdf_browse,
+)
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -65,6 +74,13 @@ def is_text_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
     "callback for verify the validity of the textfile"
     if not value.endswith(".txt"):
         raise click.BadParameter(f"'{value}' must be a textfile", ctx=ctx, param=param)
+    return value
+
+
+def is_vector_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    "callback for verify the validity of the vector file"
+    if not value.endswith((".shp", ".gpkg", ".geojson")):
+        raise click.BadParameter(f"'{value}' must be a vector data file (.gpkg, .shp, .geojson)", ctx=ctx, param=param)
     return value
 
 
@@ -176,7 +192,8 @@ def search(
                 scenes = []
                 for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
                     scenes += batch_scenes
-                to_gpkg(scenes, output)
+                gdf = to_gdf(scenes)
+                save_in_gfile(gdf, output)
 
     # if dataset is invalid print a list of similar dataset for the user
     except USGSInvalidDataset:
@@ -229,13 +246,41 @@ def download(
     api.logout()
 
 
+@click.command("download-browse")
+@click.argument("vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(dir_okay=True, resolve_path=True),
+    default="./browse_images/",
+    help="Output directory",
+)
+@click.option("--pbar", is_flag=True, default=True, help="Display a progress bar.")
+def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
+    """
+    Download browse images of a vector data file localy.
+    """
+    # create the directory if it not exist
+    os.makedirs(output_dir, exist_ok=True)
+
+    # read the vector file
+    gdf = gpd.read_file(vector_file)
+    print(gdf.shape)
+
+    # get the list of browse_url
+    url_list = gdf["browse_url"].tolist()
+
+    # download the list of url with download_browse_img
+    dl_recap = download_browse_img(url_list, output_dir, pbar)
+
+    # update the vector file with browse_path added
+    gdf = update_gdf_browse(gdf, dl_recap, output_dir)
+    save_in_gfile(gdf, vector_file)
+
+
 cli.add_command(search)
 cli.add_command(download)
-
-
-@click.command()
-def cli_gpkg():
-    click.echo("hello")
+cli.add_command(download_browse)
 
 
 if __name__ == "__main__":
