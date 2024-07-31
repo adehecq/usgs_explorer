@@ -135,6 +135,7 @@ def download_browse_img(url_list: list[str], output_dir: str, pbar: bool = True)
     # loop around not already_download urls and download it and save
     # status_code in the dataframe
     session = requests.Session()
+    # flake8: noqa E712
     for url, row in df[df["already_download"] == False].iterrows():
         response = session.get(url)
         if response.status_code == 200:
