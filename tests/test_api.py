@@ -66,10 +66,11 @@ class TestAPI:
 
     def test_scene_search(self):
         "Test the scene search method"
-        result = self.api.scene_search("landsat_tm_c2_l1", max_results=1, metadata_type=None)
+        scene_filter = filt.SceneFilter.from_args(date_interval=("1900-01-01", "2024-08-01"))
+        result = self.api.scene_search("landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type=None)
 
         assert result["recordsReturned"] == 1
-        assert result["totalHits"] > 2940000
+        assert result["totalHits"] == 2940410
         assert result["startingNumber"] == 1
         assert result["results"][0]["metadata"] == []
 
