@@ -3,13 +3,13 @@
 
 # Description
 
-The **usgsxplore** Python package provides an interface to the [M2M API](https://m2m.cr.usgs.gov/) to search and donwloads scenes.
+The **usgsxplore** Python package provides an interface to the [USGS M2M API](https://m2m.cr.usgs.gov/) to search and download data available from the [Earth Explorer](https://earthexplorer.usgs.gov/) platform.
 
-This package is highly inspired of [landsatxplore](https://github.com/yannforget/landsatxplore) but it support more dataset and add functionalities.
+This package is highly inspired by [landsatxplore](https://github.com/yannforget/landsatxplore) but it supports more datasets and adds new functionalities.
 
 # Quick start
 
-Searching for Landsat scenes that contains the location (5.7074, 45.1611) acquired between 2010-2020.
+Searching for Landsat scenes over the location (5.7074, 45.1611) acquired between 2010-2020.
 
 ```bash
 usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
@@ -62,6 +62,7 @@ Commands:
 ### Credentials
 
 Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/).
+Either one of the password or token must be provided.
 
 `--username` and `--token` or `--password` can be provided as command-line options or as environment variables:
 
@@ -99,24 +100,24 @@ Options:
 ```
 
 If the `--output` is not provided, the command will print entity ids of scenes found. Else if the `--output` is provided it will save results in the file. There is 5 availables format for the results:
-- **text file (.txt)** : Each line is an entity id and the first line contain the dataset ex: `#dataset=landsat_tm_c2_l1`. This file is often use to download the scenes.
+- **text file (.txt)** : Each line is an entity id and the first line contain the dataset ex: `#dataset=landsat_tm_c2_l1`. This file can then be used to download the images.
 - **json file (.json)** : json file containing the results of the search.
-- **vector data (.gpkg, .shp, .geojson)** : save the results in a vector data file, usefull to visualise the results.
+- **vector data (.gpkg, .shp, .geojson)** : save the results in a vector file, useful to visualise the geographic location of the results in a GIS.
 
-The search command work with multiple scene-search so there is no limit of results, but you can fixe one with `--limit`.
+The search command works with multiple scene-search so there is no limit of results, but you can fixe one with `--limit`.
 
-If you provide a wrong dataset, a list of 50 datasets with high string similarity will be print.
+If you provide a wrong dataset, a list of 50 datasets with high string similarity will be printed.
 
-The `--filter` work like this "`field1=value1 & field2=value2 | field3=value3`". For the field you can put either the filter id, the filter label, or the sql filter. For the value you can put either value or value label. Exemples:
+The `--filter` works like this "`field1=value1 & field2=value2 | field3=value3`". For the field you can put either the filter id, the filter label, or the sql filter. For the value you can put either value or value label. Exemples:
 ```bash
-# select scenes of satelites Hexagon KH-9
+# select scenes from the Hexagon KH-9 satellite
 # all of those 4 command will give the same results
 usgsxplore search declassii --filter "camera=L"
 usgsxplore search declassii --filter "Camera Type=L"
 usgsxplore search declassii --filter "5e839ff8cfa94807=L"
 usgsxplore search declassii --filter "camera=KH-9 Lower Resolution Mapping Camera"
 
-# select scenes of satelites Hexagon KH-9 if their are downloadable
+# select scenes from the Hexagon KH-9 satellites if they are downloadable
 usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
 ```
 
@@ -142,7 +143,7 @@ Options:
   --overwrite               Overwrite existing files
   --help                    Show this message and exit.
 ```
-This command download scenes from their entity ids in the `TEXTFILE` and save the results in `--output-dir`. It can display different type of progression depends on `--pbar` value:
-- **0** : display nothing.
-- **1** : display one progress bar for all scenes downloading.
-- **2** : display a progress bar for each scenes downloading, with state information.
+This command download scenes from their entity ids in the `TEXTFILE` and save the results in `--output-dir`. It can display different types of progression bars depending on the `--pbar` value:
+- **0** : no progress bar displayed.
+- **1** : one progress bar for all scene downloads.
+- **2** : one progress bar for each scene download, with state information.
