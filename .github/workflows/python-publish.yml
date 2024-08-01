@@ -30,6 +30,16 @@ jobs:
     - name: Install Poetry
       uses: snok/install-poetry@v1
 
+    - name: Set up Poetry environment
+      run: |
+        poetry config virtualenvs.create false
+        poetry install
+
+    - name: Update version in pyproject.toml
+      run: |
+        VERSION=${{ github.event.release.tag_name }}
+        sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+
     - name: Build and publish to PyPI
       uses: JRubics/poetry-publish@v1.16
       with:
