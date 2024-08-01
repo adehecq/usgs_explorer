@@ -151,3 +151,19 @@ This command download scenes from their entity ids in the `TEXTFILE` and save th
 - **0** : display nothing.
 - **1** : display one progress bar for all scenes downloading.
 - **2** : display a progress bar for each scenes downloading, with state information.
+
+### Downloading browse
+
+```bash
+usgsxplore download-browse --help
+```
+```
+Usage: usgsxplore download-browse [OPTIONS] VECTOR_FILE
+
+  Download browse images of a vector data file localy.
+
+Options:
+  -o, --output-dir PATH  Output directory
+  --pbar                 Display a progress bar.
+  --help                 Show this message and exit.
+```
