@@ -156,7 +156,7 @@ def download_browse_img(url_list: list[str], output_dir: str, pbar: bool = True)
     return df
 
 
-def update_gdf_browse(gdf: gpd.GeoDataFrame, dl_recap: pd.DataFrame, output_dir: str) -> None:
+def update_gdf_browse(gdf: gpd.GeoDataFrame, output_dir: str) -> gpd.GeoDataFrame:
     """
     Update the gdf given to add a new metadata "browse_path" with the browse.
 

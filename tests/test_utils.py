@@ -12,10 +12,12 @@ import pytest
 
 from usgsxplore.api import API
 from usgsxplore.utils import (
+    download_browse_img,
     read_textfile,
     save_in_gfile,
     sort_strings_by_similarity,
     to_gdf,
+    update_gdf_browse,
 )
 
 
@@ -82,6 +84,27 @@ def test_read_textfile() -> None:
         assert "id2" not in list_id and "id3" not in list_id
         assert "id4" in list_id
         assert len(list_id) == 2
+
+
+def test_download_browse_img(scenes_metadata: list[dict]) -> None:
+    "Test the download_browse_img function"
+    gdf = to_gdf(scenes_metadata)
+    url_list = gdf["browse_url"].tolist()
+
+    with TemporaryDirectory() as tmpdir:
+        dl_recap = download_browse_img(url_list, tmpdir, False)
+        assert dl_recap.shape == (10, 2)
+        assert len(os.listdir(tmpdir)) == 10
+
+
+def test_update_gdf_browse(scenes_metadata: list[dict]) -> None:
+    "Test the update_gdf_browse function"
+    gdf = to_gdf(scenes_metadata)
+
+    gdf = update_gdf_browse(gdf, "images")
+
+    # test if the browse_path key exist in column
+    gdf["browse_path"]
 
 
 # End-of-file (EOF)
