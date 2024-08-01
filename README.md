@@ -125,6 +125,21 @@ usgsxplore search declassii --filter "camera=KH-9 Lower Resolution Mapping Camer
 usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
 ```
 
+**Note**: If you don't know what filters are available, they will be printed to screen when typing any (wrong) value. For example, 
+```bash
+usgsxplore search declassii -f "whatever=?"
+```
+will print all metadata filters that can be used for the "declassii" dataset.
+
+<img width="439" alt="image" src="https://github.com/user-attachments/assets/e3fc1fdc-9ee2-4ddb-a9a4-863c5884a1d3">
+
+```bash
+usgsxplore search declassii -f "camera=?"
+```
+will print all possible values for the filter "camera".
+
+<img width="391" alt="image" src="https://github.com/user-attachments/assets/bcdedad7-39b0-44de-bf8c-fc7e4ca5f1ee">
+
 ### Downloading
 
 ```bash
