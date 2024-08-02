@@ -24,7 +24,7 @@ def api():
 
 
 def test_dataset_not_available(api: API):
-    "Test error when tthe dataset is not valid"
+    "Test error when the dataset is not valid"
     entity_ids = ["this_is_not_valid"]
     with TemporaryDirectory() as tmpdir:
         with pytest.raises(USGSInvalidDataset):
@@ -40,7 +40,7 @@ def test_scenes_not_founds(api: API):
 
 
 def test_scenes_not_available(api: API):
-    "Test that no file are donwload when scenes are not available"
+    "Test that no file are download when scenes are not available"
     entity_ids = ["DZB1216-500523L001001"]
     with TemporaryDirectory() as tmpdir:
         api.download("declassii", entity_ids, tmpdir, pbar_type=True)

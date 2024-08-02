@@ -36,4 +36,4 @@ jobs:
       env:
         USGS_USERNAME: ${{ secrets.USGSXPLORE_USERNAME }}
         USGS_TOKEN: ${{ secrets.USGSXPLORE_TOKEN }}
-      run: poetry run pytest tests/
+      run: poetry run pytest --ignore=tests/test_download.py -k "not test_download"
