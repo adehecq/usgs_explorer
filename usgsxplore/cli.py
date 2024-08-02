@@ -17,6 +17,7 @@ from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDat
 from usgsxplore.filter import SceneFilter
 from usgsxplore.utils import (
     download_browse_img,
+    format_table,
     read_textfile,
     save_in_gfile,
     sort_strings_by_similarity,
@@ -303,18 +304,25 @@ def dataset(username: str, password: str | None, token: str | None, all: bool) -
     api.logout()
 
 
-@click.command("filter-field")
-def filter_field() -> None:
+@click.command()
+@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
+@click.option(
+    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
+)
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.argument("dataset", type=click.STRING)
+def filters(username: str, password: str | None, token: str | None, dataset: str) -> None:
     """
     Display a list of available filter field for a dataset.
     """
+    api = API(username, password, token)
+    dataset_filters = api.dataset_filters(dataset)
+    table = [["field id", "field lbl", "field sql"]]
+    for i, filt in enumerate(dataset_filters):
+        table.append([filt["id"], filt["fieldLabel"], filt["searchSql"].split(" ", maxsplit=1)[0]])
+    click.echo(format_table(table))
 
-
-@click.command("filter-value")
-def filter_value() -> None:
-    """
-    Display a list of available filter values for a dataset.
-    """
+    api.logout()
 
 
 cli.add_command(search)
@@ -322,8 +330,7 @@ cli.add_command(download)
 cli.add_command(download_browse)
 cli.add_command(info)
 info.add_command(dataset)
-info.add_command(filter_field)
-info.add_command(filter_value)
+info.add_command(filters)
 
 
 if __name__ == "__main__":
