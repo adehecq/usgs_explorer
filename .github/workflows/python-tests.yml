@@ -34,6 +34,6 @@ jobs:
 
     - name: Run Pytest
       env:
-        USGSXPLORE_USERNAME: ${{ secrets.USGSXPLORE_USERNAME }}
-        USGSXPLORE_TOKEN: ${{ secrets.USGSXPLORE_TOKEN }}
+        USGS_USERNAME: ${{ secrets.USGSXPLORE_USERNAME }}
+        USGS_TOKEN: ${{ secrets.USGSXPLORE_TOKEN }}
       run: poetry run pytest tests/

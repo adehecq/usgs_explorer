@@ -28,7 +28,7 @@ class TestAPI:
 
     @classmethod
     def setup_class(cls):
-        cls.api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
+        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
 
     @classmethod
     def teardown_class(cls):
@@ -115,7 +115,7 @@ class TestScenesDownloader:
 
     @classmethod
     def setup_class(cls):
-        cls.api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
+        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
 
     @classmethod
     def teardown_class(cls):
@@ -234,7 +234,7 @@ class TestFilter:
 
     @classmethod
     def setup_class(cls):
-        cls.api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
+        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
         cls.dataset_filters = cls.api.dataset_filters("declassii")
 
     @classmethod

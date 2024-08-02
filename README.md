@@ -71,9 +71,9 @@ Either one of the password or token must be provided.
 `--username` and `--token` or `--password` can be provided as command-line options or as environment variables:
 
 ``` shell
-export USGSXPLORE_USERNAME=<your_username>
-export USGSXPLORE_TOKEN=<your_token>
-export USGSXPLORE_PASSWORD=<your_password>
+export USGS_USERNAME=<your_username>
+export USGS_TOKEN=<your_token>
+export USGS_PASSWORD=<your_password>
 ```
 
 ### Searching

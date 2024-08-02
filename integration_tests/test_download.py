@@ -18,7 +18,7 @@ from usgsxplore.api import API, ScenesDownloader, ScenesNotFound, USGSInvalidDat
 
 @pytest.fixture(scope="module")
 def api():
-    _api = API(os.getenv("USGSXPLORE_USERNAME"), token=os.getenv("USGSXPLORE_TOKEN"))
+    _api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
     yield _api
     _api.logout()
 

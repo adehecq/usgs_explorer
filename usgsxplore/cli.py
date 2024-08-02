@@ -100,10 +100,10 @@ def cli() -> None:
 # ----------------------------------------------------------------------------------------------------
 @click.command()
 @click.option(
-    "-u", "--username", type=click.STRING, required=True, help="EarthExplorer username.", envvar="USGSXPLORE_USERNAME"
+    "-u", "--username", type=click.STRING, required=True, help="EarthExplorer username.", envvar="USGS_USERNAME"
 )
 @click.option(
-    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGSXPLORE_PASSWORD"
+    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
 )
 @click.option(
     "-t",
@@ -111,7 +111,7 @@ def cli() -> None:
     type=click.STRING,
     help="EarthExplorer token.",
     required=False,
-    envvar="USGSXPLORE_TOKEN",
+    envvar="USGS_TOKEN",
     callback=check_log,
 )
 @click.argument("dataset", type=click.STRING)
@@ -212,13 +212,11 @@ def search(
 # 									DOWNLOAD COMMAND
 # ----------------------------------------------------------------------------------------------------
 @click.command()
-@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGSXPLORE_USERNAME")
+@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
 @click.option(
-    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGSXPLORE_PASSWORD"
+    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
 )
-@click.option(
-    "-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGSXPLORE_TOKEN"
-)
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
 @click.argument("textfile", type=click.Path(exists=True, file_okay=True), callback=is_text_file)
 @click.option("--dataset", "-d", type=click.STRING, required=False, help="Dataset", callback=read_dataset_textfile)
 @click.option("--output-dir", "-o", type=click.Path(dir_okay=True), default=".", help="Output directory")
