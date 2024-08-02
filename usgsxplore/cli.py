@@ -276,9 +276,54 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     save_in_gfile(gdf, vector_file)
 
 
+@click.group()
+def info() -> None:
+    """
+    Display some informations.
+    """
+
+
+@click.command()
+@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
+@click.option(
+    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
+)
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.option("-a", "--all", is_flag=True, help="display also all event dataset")
+def dataset(username: str, password: str | None, token: str | None, all: bool) -> None:
+    """
+    Display the list of available dataset in the API.
+    """
+    api = API(username, password, token)
+    if all:
+        click.echo(api.dataset_names())
+    else:
+        dataset_list = [dataset for dataset in api.dataset_names() if not dataset.startswith("event")]
+        click.echo(dataset_list)
+    api.logout()
+
+
+@click.command("filter-field")
+def filter_field() -> None:
+    """
+    Display a list of available filter field for a dataset.
+    """
+
+
+@click.command("filter-value")
+def filter_value() -> None:
+    """
+    Display a list of available filter values for a dataset.
+    """
+
+
 cli.add_command(search)
 cli.add_command(download)
 cli.add_command(download_browse)
+cli.add_command(info)
+info.add_command(dataset)
+info.add_command(filter_field)
+info.add_command(filter_value)
 
 
 if __name__ == "__main__":
