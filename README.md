@@ -58,14 +58,16 @@ Options:
   --help  Show this message and exit.
 
 Commands:
-  download  Download scenes with their entity ids provided in the textfile.
+  download         Download scenes with their entity ids provided in the textfile.
   download-browse  Download browse images of a vector data file localy.
-  search    Search scenes in a dataset with filters.
+  info             Display information on available datasets and filters.
+  search           Search scenes in a dataset with filters.
 ```
 
 ### Credentials
 
-Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/).
+Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/). Note that you need to specify specifically all datasets you plan to access through the API.
+
 Either one of the password or token must be provided.
 
 `--username` and `--token` or `--password` can be provided as command-line options or as environment variables:
@@ -103,7 +105,7 @@ Options:
   --help                       Show this message and exit.
 ```
 
-If the `--output` is not provided, the command will print entity ids of scenes found. Else if the `--output` is provided it will save results in the file. There is 5 availables format for the results:
+If the `--output` is not provided, the command will print the entity ids of scenes found. Else if `--output` is provided it will save the results in the given file. Five formats are currently supported for the output:
 - **text file (.txt)** : Each line is an entity id and the first line contain the dataset ex: `#dataset=landsat_tm_c2_l1`. This file can then be used to download the images.
 - **json file (.json)** : json file containing the results of the search.
 - **vector data (.gpkg, .shp, .geojson)** : save the results in a vector file, useful to visualise the geographic location of the results in a GIS.
@@ -124,21 +126,7 @@ usgsxplore search declassii --filter "camera=KH-9 Lower Resolution Mapping Camer
 # select scenes from the Hexagon KH-9 satellites if they are downloadable
 usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
 ```
-
-**Note**: If you don't know what filters are available, they will be printed to screen when typing any (wrong) value. For example, 
-```bash
-usgsxplore search declassii -f "whatever=?"
-```
-will print all metadata filters that can be used for the "declassii" dataset.
-
-<img width="439" alt="image" src="https://github.com/user-attachments/assets/e3fc1fdc-9ee2-4ddb-a9a4-863c5884a1d3">
-
-```bash
-usgsxplore search declassii -f "camera=?"
-```
-will print all possible values for the filter "camera".
-
-<img width="391" alt="image" src="https://github.com/user-attachments/assets/bcdedad7-39b0-44de-bf8c-fc7e4ca5f1ee">
+**Note**: To know which filters are available, check the command `usgsxplore info` below. 
 
 ### Downloading
 
@@ -182,3 +170,37 @@ Options:
   --pbar                 Display a progress bar.
   --help                 Show this message and exit.
 ```
+
+### Info: datasets and filters
+
+Information on available datasets and filters can be printed on screen with the command `usgsxplore info`
+```bash
+usgsxplore info --help
+```
+```
+Usage: usgsxplore info [OPTIONS] COMMAND [ARGS]...
+
+  Display information on available datasets and filters.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  dataset  Display the list of available datasets in the API.
+  filters  Display a list of available filter fields for a dataset.
+```
+
+**Hints**: When using `usgsxplore search`, filters will be printed to screen when typing any (wrong) value. For example, 
+```bash
+usgsxplore search declassii -f "whatever=?"
+```
+will print all metadata filters that can be used for the "declassii" dataset.
+
+<img width="439" alt="image" src="https://github.com/user-attachments/assets/e3fc1fdc-9ee2-4ddb-a9a4-863c5884a1d3">
+
+```bash
+usgsxplore search declassii -f "camera=?"
+```
+will print all possible values for the filter "camera".
+
+<img width="391" alt="image" src="https://github.com/user-attachments/assets/bcdedad7-39b0-44de-bf8c-fc7e4ca5f1ee">
