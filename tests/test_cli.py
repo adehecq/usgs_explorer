@@ -70,3 +70,17 @@ def test_download():
 
         assert result.exit_code == 0
         assert "LT05_L1TP_038037_20120505_20200820_02_T1.tar" in os.listdir(tmpdir)
+
+
+def test_info():
+    """Test the info command with each subcommand: dataset, filters"""
+    runner = CliRunner()
+
+    # Test the dataset subcommand
+    result = runner.invoke(cli, ["info", "dataset"])
+    assert result.exit_code == 0
+    assert len(result.output) == 7260  # Possibly to be updated in the future
+
+    # Test the filters subcommand
+    result = runner.invoke(cli, ["info", "filters", "declassii"])
+    assert result.exit_code == 0

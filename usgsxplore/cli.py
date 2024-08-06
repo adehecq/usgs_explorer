@@ -17,6 +17,7 @@ from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDat
 from usgsxplore.filter import SceneFilter
 from usgsxplore.utils import (
     download_browse_img,
+    format_table,
     read_textfile,
     save_in_gfile,
     sort_strings_by_similarity,
@@ -276,9 +277,60 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     save_in_gfile(gdf, vector_file)
 
 
+@click.group()
+def info() -> None:
+    """
+    Display some informations.
+    """
+
+
+@click.command()
+@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
+@click.option(
+    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
+)
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.option("-a", "--all", is_flag=True, help="display also all event dataset")
+def dataset(username: str, password: str | None, token: str | None, all: bool) -> None:
+    """
+    Display the list of available dataset in the API.
+    """
+    api = API(username, password, token)
+    if all:
+        click.echo(api.dataset_names())
+    else:
+        dataset_list = [dataset for dataset in api.dataset_names() if not dataset.startswith("event")]
+        click.echo(dataset_list)
+    api.logout()
+
+
+@click.command()
+@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
+@click.option(
+    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
+)
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.argument("dataset", type=click.STRING)
+def filters(username: str, password: str | None, token: str | None, dataset: str) -> None:
+    """
+    Display a list of available filter field for a dataset.
+    """
+    api = API(username, password, token)
+    dataset_filters = api.dataset_filters(dataset)
+    table = [["field id", "field lbl", "field sql"]]
+    for i, filt in enumerate(dataset_filters):
+        table.append([filt["id"], filt["fieldLabel"], filt["searchSql"].split(" ", maxsplit=1)[0]])
+    click.echo(format_table(table))
+
+    api.logout()
+
+
 cli.add_command(search)
 cli.add_command(download)
 cli.add_command(download_browse)
+cli.add_command(info)
+info.add_command(dataset)
+info.add_command(filters)
 
 
 if __name__ == "__main__":

@@ -172,4 +172,25 @@ def update_gdf_browse(gdf: gpd.GeoDataFrame, output_dir: str) -> gpd.GeoDataFram
     return gdf
 
 
+def format_table(data: list[list]) -> str:
+    """
+    Return a string reprentation of a 2 dimensional table
+
+    :param data: 2 dimensional table
+    :return: string representation
+    """
+    table_str = ""
+    col_widths = [max(len(str(item)) for item in col) for col in zip(*data)]
+
+    # consider the first line like a header
+    header = "   ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(data[0])) + "\n"
+    table_str += header
+
+    # construct other line
+    for row in data[1:]:
+        table_str += " | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)) + "\n"
+
+    return table_str
+
+
 # End-of-file (EOF)
