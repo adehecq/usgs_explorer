@@ -257,7 +257,7 @@ def download(
 @click.option("--pbar", is_flag=True, default=True, help="Display a progress bar.")
 def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     """
-    Download browse images of a vector data file localy.
+    Download browse images of a vector data file locally.
     """
     # create the directory if it not exist
     os.makedirs(output_dir, exist_ok=True)
@@ -270,7 +270,7 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     url_list = gdf["browse_url"].tolist()
 
     # download the list of url with download_browse_img
-    dl_recap = download_browse_img(url_list, output_dir, pbar)
+    _ = download_browse_img(url_list, output_dir, pbar)
 
     # update the vector file with browse_path added
     gdf = update_gdf_browse(gdf, output_dir)
@@ -280,7 +280,7 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
 @click.group()
 def info() -> None:
     """
-    Display some informations.
+    Display some information.
     """
 
 
@@ -318,7 +318,7 @@ def filters(username: str, password: str | None, token: str | None, dataset: str
     api = API(username, password, token)
     dataset_filters = api.dataset_filters(dataset)
     table = [["field id", "field lbl", "field sql"]]
-    for i, filt in enumerate(dataset_filters):
+    for _i, filt in enumerate(dataset_filters):
         table.append([filt["id"], filt["fieldLabel"], filt["searchSql"].split(" ", maxsplit=1)[0]])
     click.echo(format_table(table))
 
