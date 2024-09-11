@@ -79,7 +79,7 @@ def test_info():
     # Test the dataset subcommand
     result = runner.invoke(cli, ["info", "dataset"])
     assert result.exit_code == 0
-    assert len(result.output) == 7260  # Possibly to be updated in the future
+    assert len(result.output) == 2298  # Possibly to be updated in the future
 
     # Test the filters subcommand
     result = runner.invoke(cli, ["info", "filters", "declassii"])

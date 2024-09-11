@@ -59,7 +59,7 @@ def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> No
     """
     # save the geodataframe in a geospatial file
     if vector_file.endswith(".shp"):
-        # here we ingore warnings that tell us all field are truncated
+        # here we ignore warnings that tell us all field are truncated
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=r"Normalized/laundered field name: '.+' to '.+'")
             gdf.to_file(vector_file)
@@ -115,6 +115,12 @@ def download_browse_img(url_list: list[str], output_dir: str, pbar: bool = True)
     :param pbar: if True display a progress bar of the downloading
     :return: dataframe of downloading recap
     """
+    # Some URLs are set to None -> remove those
+    url_list_filtered = [url for url in url_list if url is not None]
+    print(f"Found {len(url_list) - len(url_list_filtered)} invalid URLs -> skipping")
+    url_list = url_list_filtered
+
+    # Create a dataframe of urls
     df = pd.DataFrame({"url": url_list})
     df.set_index("url", inplace=True)
     df = df.assign(already_download=False, status=None)
@@ -156,17 +162,28 @@ def download_browse_img(url_list: list[str], output_dir: str, pbar: bool = True)
     return df
 
 
+def basename_ignore_none(path: str | None):
+    """
+    Return the basename of a path but ignore items with None to avoid errors for invalid browse url.
+    :param path: Path to the file
+    :return: basename to the file, or "none" if input is None
+    """
+    if path is not None:
+        return os.path.basename(path)
+    else:
+        return "none"
+
+
 def update_gdf_browse(gdf: gpd.GeoDataFrame, output_dir: str) -> gpd.GeoDataFrame:
     """
     Update the gdf given to add a new metadata "browse_path" with the browse.
 
     :param gdf: the geodataframe that would be modified
-    :param dl_recap: recap of the downloading (output of download_browse_img)
     :param output_dir: browse output_dir
     :return gdf
     """
     gdf = gdf.assign(browse_path=gdf["browse_url"])
-    gdf["browse_path"] = gdf["browse_path"].apply(os.path.basename)
+    gdf["browse_path"] = gdf["browse_path"].apply(basename_ignore_none)
     gdf["browse_path"] = gdf["browse_path"].apply(lambda x: os.path.join(output_dir, x))
 
     return gdf
@@ -174,7 +191,7 @@ def update_gdf_browse(gdf: gpd.GeoDataFrame, output_dir: str) -> gpd.GeoDataFram
 
 def format_table(data: list[list]) -> str:
     """
-    Return a string reprentation of a 2 dimensional table
+    Return a string representation of a 2 dimensional table
 
     :param data: 2 dimensional table
     :return: string representation

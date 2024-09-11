@@ -1,5 +1,5 @@
 """
-Description: module contain 2 classes usefull for the downloading of scenes: ScenesDownloader and Product
+Description: module contain 2 classes useful for the downloading of scenes: ScenesDownloader and Product
 
 
 Last modified: 2024
@@ -34,7 +34,7 @@ class ScenesDownloader:
         :param output_dir: path of the output directory
         :param max_thread: max number of thread used for the downloading
         :param pbar_type: way to display progress bar (0: no pbar, 1: one pbar, 2: pbar for each scenes)
-        :param overwrite: if false don't download images wich are already in the output directory
+        :param overwrite: if false don't download images which are already in the output directory
         """
         # here we do list(set(...)) to remove duplicate ids
         self.df = pd.DataFrame({"entity_id": list(set(entity_ids))})
@@ -72,7 +72,7 @@ class ScenesDownloader:
 
     def get_downloads(self) -> list[dict]:
         """
-        Return a list of dict formated for M2M api download-request.
+        Return a list of dict formatted for M2M api download-request.
         The different dict represent a product contain in self.download
 
         :return: downloads
@@ -110,7 +110,7 @@ class ScenesDownloader:
 
     def _download_worker(self, entity_id: str) -> None:
         """
-        Donwload the images with the url in the dataframe associate to the entity_id given.
+        Download the images with the url in the dataframe associate to the entity_id given.
         Every 5 Mo update the progress in the dataframe and update progress bar.
         This method is designed to be in a thread
 
