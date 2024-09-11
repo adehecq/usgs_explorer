@@ -126,7 +126,7 @@ usgsxplore search declassii --filter "camera=KH-9 Lower Resolution Mapping Camer
 # select scenes from the Hexagon KH-9 satellites if they are downloadable
 usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
 ```
-**Note**: To know which filters are available, check the command `usgsxplore info` below. 
+**Note**: To know which filters are available, check the command `usgsxplore info` below.
 
 ### Downloading
 
@@ -190,7 +190,7 @@ Commands:
   filters  Display a list of available filter fields for a dataset.
 ```
 
-**Hints**: When using `usgsxplore search`, filters will be printed to screen when typing any (wrong) value. For example, 
+**Hints**: When using `usgsxplore search`, filters will be printed to screen when typing any (wrong) value. For example,
 ```bash
 usgsxplore search declassii -f "whatever=?"
 ```
