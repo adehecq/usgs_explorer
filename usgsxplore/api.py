@@ -1,6 +1,7 @@
 """
-Description: module contain the API class to download and interact with the USGS api (https://m2m.cr.usgs.gov/api/docs/json/).
-This class is highly inspirate from https://github.com/yannforget/landsatxplore.
+Description: module contain the API class to download and interact with the USGS api
+(https://m2m.cr.usgs.gov/api/docs/json/).
+This class is highly inspired by https://github.com/yannforget/landsatxplore.
 
 Last modified: 2024
 Author: Luc Godin
@@ -94,7 +95,7 @@ class API:
         :param password: EarthExplorer password.
         :param token: EarthExplorer token.
         :raise APIInvalidParameters: if password and token are None.
-        :raise USGSAuthenticationError: If the authentification failed
+        :raise USGSAuthenticationError: If the authentication failed
         """
         if password is None and token is None:
             raise APIInvalidParameters("Either password or token need to be given.")
@@ -247,16 +248,16 @@ class API:
         batch_size: int = 10000,
     ) -> Generator[list[dict], None, None]:
         """
-        Return a Generator with each element is a list of 10000 (batch_size) scenes informations.
+        Return a Generator with each element is a list of 10000 (batch_size) scenes information.
         The scenes are filtered with the scene_filter given.
 
         :param dataset: Alias dataset
         :param scene_filter: Filter for the scene you want
         :param max_results: max scenes wanted, if None return all scenes found
-        :param metadata_type: identifies wich metadata to return (full|summary|None)
+        :param metadata_type: identifies which metadata to return (full|summary|None)
         :param use_tqdm: if True display a progress bar of the search
         :param batch_size: number of maxResults of each scene-search
-        :return: generator of scenes informations batch
+        :return: generator of scenes information batch
         """
         starting_number = 1
         if use_tqdm:
@@ -301,7 +302,7 @@ class API:
         :param scene_filter: Filter for the scene you want
         :param max_results: Max. number of results. Defaults to 100.
         :param starting_number: starting number of the search. Default 1
-        :param metadata_type: identifies wich metadata to return (full|summary|None)
+        :param metadata_type: identifies which metadata to return (full|summary|None)
         :return: Result of the scene-search request.
         """
         # we compile the metadataFilter if it exist to format it for the API

@@ -1,5 +1,5 @@
 """
-Description: module contain differents Error class
+Description: module contain different Error class
 
 Last modified: 2024
 Author: Luc Godin
@@ -36,7 +36,7 @@ class USGSInvalidDataset(Exception):
 
 
 class APIInvalidParameters(Exception):
-    """Invalid paramaters for the API class"""
+    """Invalid parameters for the API class"""
 
 
 class MetadataFilterError(Exception):
@@ -48,7 +48,7 @@ class FilterMetadataValueError(Exception):
 
 
 class FilterFieldError(Exception):
-    """Error raise when the field value of a filter is incorect"""
+    """Error raise when the field value of a filter is incorrect"""
 
     def __init__(self, field: str, field_ids: list[str], field_labels: list[str], field_sql: list[str]) -> None:
         self.df = pd.DataFrame({"field_id": field_ids, "field_label": field_labels, "sql_field": field_sql})
@@ -59,7 +59,7 @@ class FilterFieldError(Exception):
 
 
 class FilterValueError(Exception):
-    """Error raise when the value of a filter is incorect"""
+    """Error raise when the value of a filter is incorrect"""
 
     def __init__(self, value: str, values: list[str], value_labels: list[str]) -> None:
         self.df = pd.DataFrame(

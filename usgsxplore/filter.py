@@ -100,7 +100,7 @@ class SpatialFilterGeoJSON(dict):
         if gdf.crs != "EPSG:4326":
             gdf.to_crs(epsg=4326, inplace=True)
 
-        # create a combine of all geometry into a big one and crate instance with it
+        # create a combine of all geometry into a big one and create instance with it
         shape = mapping(unary_union(gdf.geometry))
         return cls(shape)
 
@@ -160,7 +160,7 @@ class MetadataFilter(dict):
     def from_str(cls, str_repr: str) -> "MetadataFilter":
         """
         Create an instance of MetadataFilter with a string representation.
-        Exemple of string representation : "field1=value1 & field2=value2"
+        Example of string representation : "field1=value1 & field2=value2"
 
         :param str_repr: string representation of the filter
         """
@@ -189,7 +189,7 @@ class MetadataFilter(dict):
 
         :param other: MetadataFilter or any but the and is defined only for MetadataFilter
         :return: MetadataFilter and
-        ### Exemple
+        ### Example
         ```
         # f is a MetadataAnd
         f = MetadataValue("camera_resol","6") & MetadataValue("camera","H")
@@ -209,7 +209,7 @@ class MetadataFilter(dict):
 
         :param other: MetadataFilter or any but the or is defined only for MetadataFilter
         :return: MetadataFilter or
-        ### Exemple
+        ### Example
         ```
         # f is a MetadataOr
         f = MetadataValue("camera_resol","6") | MetadataValue("camera","H")
@@ -227,7 +227,7 @@ class MetadataValue(MetadataFilter):
     """
     Metadata value
 
-    ### Exemple
+    ### Example
     ```{python}
     # when all filter are compiled f1 == f2 == f3
     f1 = MetadataValue("5e839ff8388465fa","6")
@@ -244,7 +244,7 @@ class MetadataValue(MetadataFilter):
         :param value: value or value label for the filter
 
 
-        ### Exemple
+        ### Example
         ```{python}
         # when all filter are compiled f1 == f2 == f3
         f1 = MetadataValue("5e839ff8388465fa","6")

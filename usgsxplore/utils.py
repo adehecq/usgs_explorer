@@ -59,7 +59,7 @@ def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> No
     """
     # save the geodataframe in a geospatial file
     if vector_file.endswith(".shp"):
-        # here we ingore warnings that tell us all field are truncated
+        # here we ignore warnings that tell us all field are truncated
         with warnings.catch_warnings():
             warnings.filterwarnings("ignore", message=r"Normalized/laundered field name: '.+' to '.+'")
             gdf.to_file(vector_file)
@@ -191,7 +191,7 @@ def update_gdf_browse(gdf: gpd.GeoDataFrame, output_dir: str) -> gpd.GeoDataFram
 
 def format_table(data: list[list]) -> str:
     """
-    Return a string reprentation of a 2 dimensional table
+    Return a string representation of a 2 dimensional table
 
     :param data: 2 dimensional table
     :return: string representation
