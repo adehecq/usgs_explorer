@@ -273,7 +273,7 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     dl_recap = download_browse_img(url_list, output_dir, pbar)
 
     # update the vector file with browse_path added
-    gdf = update_gdf_browse(gdf, dl_recap, output_dir)
+    gdf = update_gdf_browse(gdf, output_dir)
     save_in_gfile(gdf, vector_file)
 
 
