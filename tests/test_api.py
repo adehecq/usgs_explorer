@@ -282,8 +282,8 @@ class TestFilter:
             ],
         }
         sfg = filt.SpatialFilterGeoJSON(shape)
-        assert sfg["filterType"] == "geoJson"
-        assert isinstance(sfg["geoJson"], filt.GeoJson)
+        assert sfg["filterType"] == "geojson"
+        assert isinstance(sfg["geojson"], filt.GeoJson)
 
     def test_spatial_filter_from_file(self):
         "Test the SpatialFilterGeoJSON.from_file method"
@@ -300,8 +300,8 @@ class TestFilter:
         with TemporaryDirectory() as tmp_dir:
             gdf.to_file(os.path.join(tmp_dir, "shape.geojson"), driver="GeoJSON")
             sfg = filt.SpatialFilterGeoJSON.from_file(os.path.join(tmp_dir, "shape.geojson"))
-            assert sfg["filterType"] == "geoJson"
-            assert isinstance(sfg["geoJson"], filt.GeoJson)
+            assert sfg["filterType"] == "geojson"
+            assert isinstance(sfg["geojson"], filt.GeoJson)
 
     def test_spatial_filter_mbr(self):
         "Test the SpatialFilterMbr class"

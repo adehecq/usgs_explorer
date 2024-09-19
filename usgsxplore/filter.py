@@ -88,8 +88,8 @@ class SpatialFilterGeoJSON(dict):
 
         :param shape: Input shape as a geojson-like dict.
         """
-        self["filterType"] = "geoJson"
-        self["geoJson"] = GeoJson(shape)
+        self["filterType"] = "geojson"
+        self["geojson"] = GeoJson(shape)
 
     @classmethod
     def from_file(cls, file_path: str):

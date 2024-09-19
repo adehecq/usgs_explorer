@@ -137,6 +137,12 @@ def cli() -> None:
     nargs=4,
     help="Bounding box (xmin, ymin, xmax, ymax).",
 )
+@click.option(
+    "-g",
+    "--geojson",
+    type=click.Path(file_okay=True),
+    help="GeoJSON file to use for spatial filter",
+)
 @click.option("-c", "--clouds", type=click.INT, help="Max. cloud cover (1-100).")
 @click.option(
     "-i",
@@ -156,6 +162,7 @@ def search(
     output: str | None,
     location: tuple[float, float] | None,
     bbox: tuple[float, float, float, float] | None,
+    geojson: str | None,
     clouds: int | None,
     interval_date: tuple[str, str] | None,
     filter: str | None,  # pylint: disable=redefined-builtin
@@ -167,7 +174,7 @@ def search(
     """
     api = API(username, password=password, token=token)
     scene_filter = SceneFilter.from_args(
-        location=location, bbox=bbox, max_cloud_cover=clouds, date_interval=interval_date, meta_filter=filter
+        location=location, bbox=bbox, g_file=geojson, max_cloud_cover=clouds, date_interval=interval_date, meta_filter=filter
     )
 
     try:
