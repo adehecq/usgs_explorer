@@ -163,6 +163,13 @@ class ScenesDownloader:
         for thread in self._threads.threads:
             thread.join()
 
+        # Close progress bars when all downloads are done
+        if self._progress.type == 1 and self._progress.static_pbar:
+            self._progress.static_pbar.close()
+        elif self._progress.type == 2 and self._progress.pbars:
+            for pbar in self._progress.pbars.values():
+                pbar.close()
+
     def stop_download(self) -> None:
         """
         Force the stop of the downloading
