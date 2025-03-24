@@ -243,7 +243,7 @@ class API:
         dataset: str,
         scene_filter: SceneFilter | None = None,
         max_results: int | None = None,
-        metadata_type: str | None = "full",
+        metadata_type: str = "full",
         use_tqdm: bool = True,
         batch_size: int = 10000,
     ) -> Generator[list[dict], None, None]:
@@ -254,7 +254,7 @@ class API:
         :param dataset: Alias dataset
         :param scene_filter: Filter for the scene you want
         :param max_results: max scenes wanted, if None return all scenes found
-        :param metadata_type: identifies which metadata to return (full|summary|None)
+        :param metadata_type: identifies which metadata to return (full|summary)
         :param use_tqdm: if True display a progress bar of the search
         :param batch_size: number of maxResults of each scene-search
         :return: generator of scenes information batch
@@ -294,7 +294,7 @@ class API:
         scene_filter: SceneFilter | None = None,
         max_results: int = 100,
         starting_number: int = 1,
-        metadata_type: str | None = "full",
+        metadata_type: str = "full",
     ) -> dict:
         """Search for scenes.
 
@@ -302,7 +302,7 @@ class API:
         :param scene_filter: Filter for the scene you want
         :param max_results: Max. number of results. Defaults to 100.
         :param starting_number: starting number of the search. Default 1
-        :param metadata_type: identifies which metadata to return (full|summary|None)
+        :param metadata_type: identifies which metadata to return (full|summary)
         :return: Result of the scene-search request.
         """
         # we compile the metadataFilter if it exist to format it for the API
