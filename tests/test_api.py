@@ -67,12 +67,12 @@ class TestAPI:
     def test_scene_search(self):
         "Test the scene search method"
         scene_filter = filt.SceneFilter.from_args(date_interval=("1900-01-01", "2024-08-01"))
-        result = self.api.scene_search("landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type=None)
+        result = self.api.scene_search("landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type="summary")
 
         assert result["recordsReturned"] == 1
         assert 2900000 <= result["totalHits"] <= 3000000  # the totalHits can changed
         assert result["startingNumber"] == 1
-        assert result["results"][0]["metadata"] == []
+        assert len(result["results"][0]["metadata"]) > 0
 
     def test_batch_search(self):
         "Test the batch search method"
@@ -80,7 +80,7 @@ class TestAPI:
         i = 0
 
         for scenes_batch in self.api.batch_search(
-            "declassii", max_results=100, metadata_type=None, batch_size=30, use_tqdm=False
+            "declassii", max_results=100, metadata_type="summary", batch_size=30, use_tqdm=False
         ):
             assert len(scenes_batch) == scenes_count[i]
             i += 1

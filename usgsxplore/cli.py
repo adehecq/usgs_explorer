@@ -172,7 +172,7 @@ def search(
 
     try:
         if output is None:
-            for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+            for batch_scenes in api.batch_search(dataset, scene_filter, limit, "summary", pbar):
                 for scene in batch_scenes:
                     click.echo(scene["entityId"])
 
@@ -180,13 +180,13 @@ def search(
             if output.endswith(".txt"):
                 with open(output, "w", encoding="utf-8") as file:
                     file.write(f"#dataset={dataset}\n")
-                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, "summary", pbar):
                         for scene in batch_scenes:
                             file.write(scene["entityId"] + "\n")
             elif output.endswith(".json"):
                 with open(output, "w", encoding="utf-8") as file:
                     scenes = []
-                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, None, pbar):
+                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
                         scenes += batch_scenes
                     json.dump(scenes, file, indent=4)
             elif output.endswith((".gpkg", ".geojson", "shp")):
