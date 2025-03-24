@@ -28,7 +28,7 @@ class TestAPI:
 
     @classmethod
     def setup_class(cls):
-        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
+        cls.api = API(os.getenv("USGS_USERNAME"), os.getenv("USGS_TOKEN"))
 
     @classmethod
     def teardown_class(cls):
@@ -41,7 +41,7 @@ class TestAPI:
     def test_login_error(self):
         "Test the error of the login"
         with pytest.raises(err.USGSAuthenticationError):
-            API("bad_username", token="bad_token")
+            API("bad_username", "bad_token")
 
     def test_get_scene_id(self):
         "Test the convert of display_id to entity_id"

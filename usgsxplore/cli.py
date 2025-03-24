@@ -42,13 +42,6 @@ def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: st
     return value
 
 
-def check_log(ctx: click.Context, param: click.Parameter, value: str | None) -> str:
-    if value is not None:
-        return value
-    if ctx.params.get("password") is None:
-        raise click.ClickException("Missing argument -p, --password or -t, --token")
-
-
 def read_dataset_textfile(ctx: click.Context, param: click.Parameter, value: str | None):
     """
     This callback is use to fill the dataset parameter with either the first line of a textfile
@@ -104,16 +97,12 @@ def cli() -> None:
     "-u", "--username", type=click.STRING, required=True, help="EarthExplorer username.", envvar="USGS_USERNAME"
 )
 @click.option(
-    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
-)
-@click.option(
     "-t",
     "--token",
     type=click.STRING,
     help="EarthExplorer token.",
-    required=False,
+    required=True,
     envvar="USGS_TOKEN",
-    callback=check_log,
 )
 @click.argument("dataset", type=click.STRING)
 @click.option(
@@ -150,8 +139,7 @@ def cli() -> None:
 @click.option("--pbar", is_flag=True, default=False, help="Display a progress bar")
 def search(
     username: str,
-    password: str | None,
-    token: str | None,
+    token: str,
     dataset: str,
     output: str | None,
     location: tuple[float, float] | None,
@@ -165,7 +153,7 @@ def search(
     """
     Search scenes in a dataset with filters.
     """
-    api = API(username, password=password, token=token)
+    api = API(username, token)
     scene_filter = SceneFilter.from_args(
         location=location, bbox=bbox, max_cloud_cover=clouds, date_interval=interval_date, meta_filter=filter
     )
@@ -214,10 +202,7 @@ def search(
 # ----------------------------------------------------------------------------------------------------
 @click.command()
 @click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
-@click.option(
-    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
-)
-@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=True, envvar="USGS_TOKEN")
 @click.argument("textfile", type=click.Path(exists=True, file_okay=True), callback=is_text_file)
 @click.option("--dataset", "-d", type=click.STRING, required=False, help="Dataset", callback=read_dataset_textfile)
 @click.option("--output-dir", "-o", type=click.Path(dir_okay=True), default=".", help="Output directory")
@@ -226,8 +211,7 @@ def search(
 @click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files")
 def download(
     username: str,
-    password: str | None,
-    token: str | None,
+    token: str,
     textfile: str,
     dataset: str,
     output_dir: str,
@@ -239,7 +223,7 @@ def download(
     Download scenes with their entity ids provided in the textfile.
     The dataset can also be provide in the first line of the textfile : #dataset=declassii
     """
-    api = API(username, password=password, token=token)
+    api = API(username, token)
     entity_ids = read_textfile(textfile)
     api.download(dataset, entity_ids, output_dir, max_thread, overwrite, pbar)
     api.logout()
@@ -286,16 +270,13 @@ def info() -> None:
 
 @click.command()
 @click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
-@click.option(
-    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
-)
-@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=True, envvar="USGS_TOKEN")
 @click.option("-a", "--all", is_flag=True, help="display also all event dataset")
-def dataset(username: str, password: str | None, token: str | None, all: bool) -> None:
+def dataset(username: str, token: str, all: bool) -> None:
     """
     Display the list of available dataset in the API.
     """
-    api = API(username, password, token)
+    api = API(username, token)
     if all:
         click.echo(api.dataset_names())
     else:
@@ -306,16 +287,13 @@ def dataset(username: str, password: str | None, token: str | None, all: bool) -
 
 @click.command()
 @click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
-@click.option(
-    "-p", "--password", type=click.STRING, help="EarthExplorer password.", required=False, envvar="USGS_PASSWORD"
-)
-@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=False, envvar="USGS_TOKEN")
+@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=True, envvar="USGS_TOKEN")
 @click.argument("dataset", type=click.STRING)
-def filters(username: str, password: str | None, token: str | None, dataset: str) -> None:
+def filters(username: str, token: str, dataset: str) -> None:
     """
     Display a list of available filter field for a dataset.
     """
-    api = API(username, password, token)
+    api = API(username, token)
     dataset_filters = api.dataset_filters(dataset)
     table = [["field id", "field lbl", "field sql"]]
     for _i, filt in enumerate(dataset_filters):

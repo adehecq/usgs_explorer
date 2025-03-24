@@ -20,7 +20,6 @@ import requests
 from tqdm import tqdm
 
 from usgsxplore.errors import (
-    APIInvalidParameters,
     ScenesNotFound,
     USGSAuthenticationError,
     USGSError,
@@ -36,17 +35,16 @@ API_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 class API:
     """EarthExplorer API."""
 
-    def __init__(self, username: str, password: str | None = None, token: str | None = None) -> None:
+    def __init__(self, username: str, token: str) -> None:
         """EarthExplorer API.
 
         :param username: EarthExplorer username.
-        :param password: EarthExplorer password.
         :param token: EarthExplorer token.
         """
         self.url = API_URL
         self.session = requests.Session()
         self.label = "usgsxplore"
-        self.login(username, password, token)
+        self.login(username, token)
 
     @staticmethod
     def raise_api_error(response: requests.Response) -> None:
@@ -88,23 +86,15 @@ class API:
         self.raise_api_error(r)
         return r.json().get("data")
 
-    def login(self, username: str, password: str | None = None, token: str | None = None) -> None:
-        """Get an API key. With either the login request or the login-token-request
+    def login(self, username: str, token: str) -> None:
+        """Get an API key. With the login-token request
 
         :param username: EarthExplorer username.
-        :param password: EarthExplorer password.
         :param token: EarthExplorer token.
-        :raise APIInvalidParameters: if password and token are None.
         :raise USGSAuthenticationError: If the authentication failed
         """
-        if password is None and token is None:
-            raise APIInvalidParameters("Either password or token need to be given.")
-        if token is not None:
-            login_url = urljoin(self.url, "login-token")
-            payload = {"username": username, "token": token}
-        else:
-            login_url = urljoin(self.url, "login")
-            payload = {"username": username, "password": password}
+        login_url = urljoin(self.url, "login-token")
+        payload = {"username": username, "token": token}
         r = self.session.post(login_url, json.dumps(payload))
         self.raise_api_error(r)
         self.session.headers["X-Auth-Token"] = r.json().get("data")
