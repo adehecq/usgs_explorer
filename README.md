@@ -91,9 +91,11 @@ Usage: usgsxplore search [OPTIONS] DATASET
 
 Options:
   -u, --username TEXT          EarthExplorer username.  [required]
-  -p, --password TEXT          EarthExplorer password.
-  -t, --token TEXT             EarthExplorer token.
-  -o, --output PATH            Output file : (txt, json, gpkg, shp, geojson)
+  -t, --token TEXT             EarthExplorer token.  [required]
+  -o, --output PATH            Output file : (txt, json, html, gpkg, shp,
+                               geojson)
+  -vf, --vector-file PATH      Vector file that will be used for spatial
+                               filter
   -l, --location FLOAT...      Point of interest (longitude, latitude).
   -b, --bbox FLOAT...          Bounding box (xmin, ymin, xmax, ymax).
   -c, --clouds INTEGER         Max. cloud cover (1-100).
@@ -109,6 +111,7 @@ If the `--output` is not provided, the command will print the entity ids of scen
 - **text file (.txt)** : Each line is an entity id and the first line contain the dataset ex: `#dataset=landsat_tm_c2_l1`. This file can then be used to download the images.
 - **json file (.json)** : json file containing the results of the search.
 - **vector data (.gpkg, .shp, .geojson)** : save the results in a vector file, useful to visualise the geographic location of the results in a GIS.
+- **HTML file (.html)** : save the results in a HTML file to have a quick look of scenes on a map.
 
 The search command works with multiple scene-search so there is no limit of results, but you can fixe one with `--limit`.
 
