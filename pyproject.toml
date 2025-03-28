@@ -19,6 +19,7 @@ geopandas = "^1.0.1"
 tqdm = "^4.66.4"
 shapely = "^2.0.5"
 click = "^8.1.7"
+folium = "^0.19.5"
 
 
 [tool.poetry.group.dev.dependencies]

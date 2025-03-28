@@ -20,6 +20,7 @@ from usgsxplore.utils import (
     format_table,
     read_textfile,
     save_in_gfile,
+    save_in_html,
     sort_strings_by_similarity,
     to_gdf,
     update_gdf_browse,
@@ -35,7 +36,7 @@ def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: st
     """
     if value is None:
         return None
-    formats = (".txt", ".json", ".gpkg", ".shp", ".geojson")
+    formats = (".txt", ".json", ".gpkg", ".shp", ".geojson", ".html")
     if not value.endswith(formats):
         choices = " | ".join(formats)
         raise click.BadParameter(f"'{value}' file format must be in {choices}")
@@ -109,8 +110,14 @@ def cli() -> None:
     "-o",
     "--output",
     type=click.Path(file_okay=True),
-    help="Output file : (txt, json, gpkg, shp, geojson)",
+    help="Output file : (txt, json, html, gpkg, shp, geojson)",
     callback=is_valid_output_format,
+)
+@click.option(
+    "-vf",
+    "--vector-file",
+    type=click.Path(exists=True, file_okay=True),
+    help="Vector file that will be used for spatial filter",
 )
 @click.option(
     "-l",
@@ -142,6 +149,7 @@ def search(
     token: str,
     dataset: str,
     output: str | None,
+    vector_file: str | None,
     location: tuple[float, float] | None,
     bbox: tuple[float, float, float, float] | None,
     clouds: int | None,
@@ -155,7 +163,12 @@ def search(
     """
     api = API(username, token)
     scene_filter = SceneFilter.from_args(
-        location=location, bbox=bbox, max_cloud_cover=clouds, date_interval=interval_date, meta_filter=filter
+        location=location,
+        bbox=bbox,
+        max_cloud_cover=clouds,
+        date_interval=interval_date,
+        meta_filter=filter,
+        g_file=vector_file,
     )
 
     try:
@@ -177,12 +190,15 @@ def search(
                     for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
                         scenes += batch_scenes
                     json.dump(scenes, file, indent=4)
-            elif output.endswith((".gpkg", ".geojson", "shp")):
+            elif output.endswith((".gpkg", ".geojson", ".shp", ".html")):
                 scenes = []
                 for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
                     scenes += batch_scenes
                 gdf = to_gdf(scenes)
-                save_in_gfile(gdf, output)
+                if output.endswith(".html"):
+                    save_in_html(gdf, output)
+                else:
+                    save_in_gfile(gdf, output)
 
     # if dataset is invalid print a list of similar dataset for the user
     except USGSInvalidDataset:
