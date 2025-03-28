@@ -265,7 +265,8 @@ class TestFilter:
         geojson = filt.GeoJson(shape)
         assert geojson["type"] == "Polygon"
         assert isinstance(geojson["coordinates"], list)
-        assert isinstance(geojson["coordinates"][0], filt.Coordinate)
+        assert len(geojson["coordinates"][0]) >= 4  # a polygon need to have more than  4 points
+        assert geojson["coordinates"][0][0] == geojson["coordinates"][0][-1]  # check if the polygon are closed
 
     def test_spatial_filter_geojson(self):
         "Test the SpatialFilterGeoJSON class"
@@ -282,7 +283,7 @@ class TestFilter:
             ],
         }
         sfg = filt.SpatialFilterGeoJSON(shape)
-        assert sfg["filterType"] == "geoJson"
+        assert sfg["filterType"] == "geojson"
         assert isinstance(sfg["geoJson"], filt.GeoJson)
 
     def test_spatial_filter_from_file(self):
@@ -300,7 +301,7 @@ class TestFilter:
         with TemporaryDirectory() as tmp_dir:
             gdf.to_file(os.path.join(tmp_dir, "shape.geojson"), driver="GeoJSON")
             sfg = filt.SpatialFilterGeoJSON.from_file(os.path.join(tmp_dir, "shape.geojson"))
-            assert sfg["filterType"] == "geoJson"
+            assert sfg["filterType"] == "geojson"
             assert isinstance(sfg["geoJson"], filt.GeoJson)
 
     def test_spatial_filter_mbr(self):
