@@ -8,6 +8,7 @@ import os
 import warnings
 from difflib import SequenceMatcher
 
+import folium
 import geopandas as gpd
 import pandas as pd
 import requests
@@ -69,6 +70,33 @@ def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> No
         gdf.to_file(vector_file, driver="GeoJSON")
     else:
         raise ValueError(f"The file '{vector_file}' need to end with : .shp|.gpkg|.geojson")
+
+
+def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
+    """This function save the geodataframe into an html file for quick visualisation.
+    It use folium.
+
+    Args:
+        gdf (gpd.GeoDataFrame): geodataframe that will be saved
+        html_file (str, optional): output html file. Defaults to "scenes.html".
+    """
+    if not html_file.endswith(".html"):
+        raise ValueError(f"The file '{html_file}' need to be an html file.")
+    # calculate the center of the map
+    gdf["centroid"] = gdf.to_crs(epsg=3857).geometry.centroid.to_crs(epsg=4326)
+    center = gdf["centroid"].y.mean(), gdf["centroid"].x.mean()
+
+    m = folium.Map(location=center, zoom_start=3)
+
+    # add footprint on the map
+    for _, row in gdf.iterrows():
+        if not row.geometry.geom_type == "Point":
+            # create a popup to visualise the browse_img on click
+            url = row["browse_url"]
+            popup = folium.Popup(f'<img src="{url}" width="200px">', max_width=250)
+            folium.GeoJson(row.geometry, tooltip=f"Entity ID: {row['Entity ID']}", popup=popup).add_to(m)
+
+    m.save(html_file)
 
 
 def read_textfile(textfile: str) -> list[str]:

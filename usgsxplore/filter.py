@@ -8,7 +8,6 @@ from datetime import datetime
 
 import geopandas as gpd
 from shapely.geometry import Point, mapping
-from shapely.ops import unary_union
 
 from usgsxplore.errors import (
     AcquisitionFilterError,
@@ -43,7 +42,7 @@ class GeoJson(dict):
         :param shape: Input geometry as a geojson-like dict.
         """
         self["type"] = shape["type"]
-        self["coordinates"] = self.transform(shape["type"], shape["coordinates"])
+        self["coordinates"] = shape["coordinates"]
 
     @staticmethod
     def transform(geom_type: str, coordinates) -> list[list[Coordinate]] | list[Coordinate] | Coordinate:
@@ -53,9 +52,9 @@ class GeoJson(dict):
         :return: coordinates as expected by the USGS M2M API
         """
         if geom_type == "MultiPolygon":
-            return [[Coordinate(*point) for point in polygon] for polygon in coordinates[0]]
+            return [[[Coordinate(*point) for point in polygon] for polygon in multi_poly] for multi_poly in coordinates]
         if geom_type == "Polygon":
-            return [Coordinate(*point) for point in coordinates[0]]
+            return [[Coordinate(*point) for point in polygon] for polygon in coordinates]
         if geom_type == "LineString":
             return [Coordinate(*point) for point in coordinates]
         if geom_type == "Point":
@@ -88,7 +87,7 @@ class SpatialFilterGeoJSON(dict):
 
         :param shape: Input shape as a geojson-like dict.
         """
-        self["filterType"] = "geoJson"
+        self["filterType"] = "geojson"
         self["geoJson"] = GeoJson(shape)
 
     @classmethod
@@ -101,7 +100,7 @@ class SpatialFilterGeoJSON(dict):
             gdf.to_crs(epsg=4326, inplace=True)
 
         # create a combine of all geometry into a big one and create instance with it
-        shape = mapping(unary_union(gdf.geometry))
+        shape = mapping(gdf.geometry.union_all())  # mapping(unary_union(gdf.geometry))
         return cls(shape)
 
 

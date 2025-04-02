@@ -33,6 +33,7 @@ def test_search_output():
         gpkgfile = os.path.join(tmpdir, "tmp.gpkg")
         shapefile = os.path.join(tmpdir, "tmp.shp")
         geojsonfile = os.path.join(tmpdir, "tmp.geojson")
+        htmlfile = os.path.join(tmpdir, "tmp.html")
 
         # execute all command
         result1 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", textfile])
@@ -41,7 +42,8 @@ def test_search_output():
         with pytest.warns(UserWarning):
             result4 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", shapefile])
         result5 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", geojsonfile])
-        result6 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", "tmp.html"])
+        result6 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", htmlfile])
+        result7 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", "tmp.png"])
 
         # assertions
         assert result1.exit_code == 0
@@ -49,13 +51,15 @@ def test_search_output():
         assert result3.exit_code == 0
         assert result4.exit_code == 0
         assert result5.exit_code == 0
-        assert result6.exit_code == 2
+        assert result6.exit_code == 0
+        assert result7.exit_code == 2
 
         assert os.path.exists(textfile)
         assert os.path.exists(jsonfile)
         assert os.path.exists(gpkgfile)
         assert os.path.exists(shapefile)
         assert os.path.exists(geojsonfile)
+        assert os.path.exists(htmlfile)
 
 
 def test_download():
