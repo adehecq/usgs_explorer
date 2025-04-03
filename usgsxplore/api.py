@@ -67,24 +67,35 @@ class API:
                 raise USGSInvalidDataset(f"{error_code}: {error_msg}.")
             raise USGSError(f"{error_code}: {error_msg}.")
 
-    def request(self, endpoint: str, params: dict = None) -> dict:
-        """Perform a request to the USGS M2M API.
+    def request(self, endpoint: str, params: dict = None, retries: int = 1, timeout: int = 40) -> dict:
+        """
+        Perform a request to the USGS M2M API with a timeout and retry mechanism.
+
         :param endpoint: API endpoint.
         :param params: API parameters.
-        :raise USGSAuthenticationError: If credentials are not valid of if user lacks permission.
-        :raise USGSRateLimitError: If there are too many request
+        :param retries: Number of retries in case of rate limit error.
+        :raise USGSAuthenticationError: If credentials are not valid or if user lacks permission.
+        :raise USGSRateLimitError: If there are too many requests.
         :return: JSON data returned by the USGS API.
         """
         url = urljoin(self.url, endpoint)
         data = json.dumps(params)
-        r = self.session.get(url, data=data)
-        try:
-            self.raise_api_error(r)
-        except USGSRateLimitError:
-            time.sleep(3)
-            r = self.session.get(url, data=data)
-        self.raise_api_error(r)
-        return r.json().get("data")
+
+        for attempt in range(retries + 1):
+            try:
+                response = self.session.get(url, data=data, timeout=timeout)
+                self.raise_api_error(response)
+                return response.json().get("data")
+            except USGSRateLimitError:
+                if attempt < retries:
+                    time.sleep(3)  # Attente avant de réessayer
+                else:
+                    raise
+            except requests.Timeout:
+                if attempt < retries:
+                    time.sleep(2)  # Attente avant de réessayer en cas de timeout
+                else:
+                    raise requests.Timeout("Request timed out after multiple attempts")
 
     def login(self, username: str, token: str) -> None:
         """Get an API key. With the login-token request
@@ -353,12 +364,16 @@ class API:
 
         signal.signal(signal.SIGINT, _handle_sigint)
 
+        # first download all scenes in availableDownloads from the download-request
+        download_ids = []
+        for download in request_results["availableDownloads"]:
+            download_ids.append(download["downloadId"])
+            scenes_downloader.download(download["entityId"], download["url"])
+
         # then loop with download-retrieve request every 30 sec to get
         # all download link
-        download_ids = []
         while True:
             retrieve_results = self.request("download-retrieve", {"label": self.label})
-
             # loop in all link "available" and "requested" and download it
             # with the Product.download method
             for download in retrieve_results["available"] + retrieve_results["requested"]:

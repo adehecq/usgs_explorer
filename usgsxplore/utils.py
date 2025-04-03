@@ -87,6 +87,7 @@ def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
     center = gdf["centroid"].y.mean(), gdf["centroid"].x.mean()
 
     m = folium.Map(location=center, zoom_start=3)
+    first_col_name = gdf.columns[0]
 
     # add footprint on the map
     for _, row in gdf.iterrows():
@@ -94,7 +95,7 @@ def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
             # create a popup to visualise the browse_img on click
             url = row["browse_url"]
             popup = folium.Popup(f'<img src="{url}" width="200px">', max_width=250)
-            folium.GeoJson(row.geometry, tooltip=f"Entity ID: {row['Entity ID']}", popup=popup).add_to(m)
+            folium.GeoJson(row.geometry, tooltip=f"{first_col_name}: {row[first_col_name]}", popup=popup).add_to(m)
 
     m.save(html_file)
 
