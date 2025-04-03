@@ -30,16 +30,16 @@ from usgsxplore.utils import (
 # ----------------------------------------------------------------------------------------------------
 # 									CALLBACK FUNCTIONS
 # ----------------------------------------------------------------------------------------------------
-def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: str) -> str:
+def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: tuple[str]) -> str:
     """
     Callback use to check the format of the output file of the search command.
     """
-    if value is None:
-        return None
     formats = (".txt", ".json", ".gpkg", ".shp", ".geojson", ".html")
-    if not value.endswith(formats):
-        choices = " | ".join(formats)
-        raise click.BadParameter(f"'{value}' file format must be in {choices}")
+    for filename in value:
+        if not filename.endswith(formats):
+            choices = " | ".join(formats)
+            raise click.BadParameter(f"'{value}' file format must be in {choices}")
+
     return value
 
 
@@ -110,6 +110,7 @@ def cli() -> None:
     "-o",
     "--output",
     type=click.Path(file_okay=True),
+    multiple=True,
     help="Output file : (txt, json, html, gpkg, shp, geojson)",
     callback=is_valid_output_format,
 )
@@ -172,33 +173,36 @@ def search(
     )
 
     try:
-        if output is None:
+        if not output:
             for batch_scenes in api.batch_search(dataset, scene_filter, limit, "summary", pbar):
                 for scene in batch_scenes:
                     click.echo(scene["entityId"])
 
         else:
-            if output.endswith(".txt"):
-                with open(output, "w", encoding="utf-8") as file:
-                    file.write(f"#dataset={dataset}\n")
-                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, "summary", pbar):
-                        for scene in batch_scenes:
+            # we adapt the metadata type only if their are one textfile
+            metadata_type = "summary" if len(output) == 1 and output[0].endswith(".txt") else "full"
+            scenes = []
+
+            for batch_scenes in api.batch_search(dataset, scene_filter, limit, metadata_type, pbar):
+                scenes += batch_scenes
+
+            for file in output:
+                if file.endswith(".txt"):
+                    with open(file, "w", encoding="utf-8") as file:
+                        file.write(f"#dataset={dataset}\n")
+                        for scene in scenes:
                             file.write(scene["entityId"] + "\n")
-            elif output.endswith(".json"):
-                with open(output, "w", encoding="utf-8") as file:
-                    scenes = []
-                    for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
-                        scenes += batch_scenes
-                    json.dump(scenes, file, indent=4)
-            elif output.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                scenes = []
-                for batch_scenes in api.batch_search(dataset, scene_filter, limit, "full", pbar):
-                    scenes += batch_scenes
-                gdf = to_gdf(scenes)
-                if output.endswith(".html"):
-                    save_in_html(gdf, output)
-                else:
-                    save_in_gfile(gdf, output)
+
+                elif file.endswith(".json"):
+                    with open(file, "w", encoding="utf-8") as f:
+                        json.dump(scenes, f, indent=4)
+
+                elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
+                    gdf = to_gdf(scenes)
+                    if file.endswith(".html"):
+                        save_in_html(gdf, file)
+                    else:
+                        save_in_gfile(gdf, file)
 
     # if dataset is invalid print a list of similar dataset for the user
     except USGSInvalidDataset:
