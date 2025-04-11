@@ -7,6 +7,7 @@ Last modified: 2024
 Author: Luc Godin
 """
 
+import datetime
 import json
 import random
 import signal
@@ -35,7 +36,7 @@ API_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 class API:
     """EarthExplorer API."""
 
-    def __init__(self, username: str, token: str) -> None:
+    def __init__(self, username: str, token: str, debug_mode: bool = False) -> None:
         """EarthExplorer API.
 
         :param username: EarthExplorer username.
@@ -43,7 +44,8 @@ class API:
         """
         self.url = API_URL
         self.session = requests.Session()
-        self.label = "usgsxplore"
+        self.label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.debug_mode = debug_mode
         self.login(username, token)
 
     @staticmethod
@@ -83,16 +85,31 @@ class API:
 
         for attempt in range(retries + 1):
             try:
+                if self.debug_mode:
+                    print(f"[DEBUG] Request attempt {attempt + 1}/{retries + 1}")
+                    print(f"[DEBUG] URL: {url}")
+                    print(f"[DEBUG] Params: {params}")
+                    print(f"[DEBUG] Timeout: {timeout}")
+
                 response = self.session.get(url, data=data, timeout=timeout)
+
+                if self.debug_mode:
+                    print(f"[DEBUG] Response status code: {response.status_code}")
+                    print(f"[DEBUG] Response text: {response.text}")
+
                 self.raise_api_error(response)
                 return response.json().get("data")
             except USGSRateLimitError:
                 if attempt < retries:
+                    if self.debug_mode:
+                        print("[DEBUG] Rate limit hit, retrying in 3s...")
                     time.sleep(3)  # Attente avant de réessayer
                 else:
                     raise
             except requests.Timeout:
                 if attempt < retries:
+                    if self.debug_mode:
+                        print("[DEBUG] Request timed out, retrying in 2s...")
                     time.sleep(2)  # Attente avant de réessayer en cas de timeout
                 else:
                     raise requests.Timeout("Request timed out after multiple attempts")

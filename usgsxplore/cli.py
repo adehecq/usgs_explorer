@@ -187,6 +187,11 @@ def search(
                 scenes += batch_scenes
 
             for file in output:
+                # create directories
+                directory = os.path.dirname(file)
+                if directory:
+                    os.makedirs(directory, exist_ok=True)
+
                 if file.endswith(".txt"):
                     with open(file, "w", encoding="utf-8") as file:
                         file.write(f"#dataset={dataset}\n")
@@ -245,6 +250,7 @@ def download(
     """
     api = API(username, token)
     entity_ids = read_textfile(textfile)
+    os.makedirs(output_dir, exist_ok=True)
     api.download(dataset, entity_ids, output_dir, max_thread, overwrite, pbar)
     api.logout()
 
