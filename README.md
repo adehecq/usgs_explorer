@@ -15,10 +15,10 @@ Searching for Landsat scenes over the location (5.7074, 45.1611) acquired betwee
 usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
 ```
 
-Search for Hexagon KH-9 scenes. Save the result into a geopackage
+Search for Hexagon KH-9 scenes. Save the result into a geopackage and a HTML map
 
 ```bash
-usgsxplore search declassii --filter "camera=H" --output results.gpkg
+usgsxplore search declassii --filter "camera=H" --output results.gpkg --output map.html
 ```
 
 Downloading the 10 first images from landsat_tm_c2_l1
