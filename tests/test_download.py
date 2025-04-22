@@ -16,13 +16,6 @@ import pytest
 from usgsxplore.api import API, ScenesDownloader, ScenesNotFound, USGSInvalidDataset
 
 
-@pytest.fixture(scope="module")
-def api():
-    _api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
-    yield _api
-    _api.logout()
-
-
 def test_dataset_not_available(api: API):
     "Test error when the dataset is not valid"
     entity_ids = ["this_is_not_valid"]

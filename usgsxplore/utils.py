@@ -4,9 +4,15 @@ Description: module contain some utils functions and class
 Last modified: 2024
 Author: Luc Godin
 """
+import gzip
 import os
+import subprocess
+import tarfile
 import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
+from shutil import copyfileobj
+from urllib.parse import urlparse
 
 import folium
 import geopandas as gpd
@@ -237,6 +243,247 @@ def format_table(data: list[list]) -> str:
         table_str += " | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)) + "\n"
 
     return table_str
+
+
+def convert_response_to_df(scenes_metadata: list[dict]) -> pd.DataFrame:
+    """
+    Convert scenes metadata into a pandas DataFrame (without geometry).
+
+    :param scenes_metadata: list of scene dictionaries (e.g., from scenes.jsonl)
+    :return: DataFrame with metadata and browse_url
+    """
+    attributes = {}
+
+    for scene in scenes_metadata:
+        # add all metadata attributes
+        for field in scene.get("metadata", []):
+            attributes.setdefault(field.get("fieldName"), []).append(field.get("value"))
+
+        # add browse_url field
+        if len(scene.get("browse", [])) > 0:
+            attributes.setdefault("browse_url", []).append(scene["browse"][0].get("browsePath"))
+        else:
+            attributes.setdefault("browse_url", []).append(None)
+
+    return pd.DataFrame(data=attributes)
+
+
+def process_download_options(download_options: list[dict], priority_list: list[str] = ["D187"]) -> list[dict]:
+    """
+    Filters and selects one download option per entityId from a list of download options,
+    prioritizing options whose 'productCode' is in a given priority list.
+
+    Only 'available' options are considered. If multiple options exist for the same entityId,
+    the last one in the list that is marked as priority will be selected.
+
+    :param download_options: A list of dictionaries representing download options.
+                             Each dict must contain 'available', 'entityId', and 'productCode' keys.
+    :param priority_list: A list of prioritized product codes. If an option has a productCode in this list,
+                          it will replace any previously selected option for the same entityId.
+    :return: A list of selected download options, one per unique entityId.
+    """
+    # Convert priority list to a set for faster lookup
+    priority_list = set(priority_list)
+
+    # Dictionary to hold the final selected option per entityId
+    final_download_options = {}
+
+    # Loop through all download options
+    for download_option in download_options:
+        if download_option["available"]:
+            # If no option has been selected yet for this entityId,
+            # or if the current option is a priority, select/replace it
+            if (
+                download_option["entityId"] not in final_download_options
+                or download_option["productCode"] in priority_list
+            ):
+                final_download_options[download_option["entityId"]] = download_option
+
+    # Convert the dictionary values to a list of selected options
+    return list(final_download_options.values())
+
+
+def download_files(
+    urls: list[dict],
+    output_dir: str = ".",
+    max_threads: int = 5,
+    overwrite: bool = False,
+    show_progress: bool = True,
+):
+    """
+    Download files from a list of dicts with 'entityId' and 'url'.
+    The filename will be: {entityId}.{extension}
+
+    :param urls: List of dicts like {'entityId': str, 'url': str}
+    :param output_dir: Directory to save the downloaded files
+    :param max_threads: Number of concurrent download threads
+    :param overwrite: Whether to overwrite files if they already exist
+    :param show_progress: Whether to display a progress bar
+    :return: None
+    """
+    os.makedirs(output_dir, exist_ok=True)
+    session = requests.Session()
+
+    def download(item: dict):
+        url = item.get("url")
+        entity_id = item.get("entityId")
+        try:
+            with session.get(url, stream=True, timeout=30) as r:
+                r.raise_for_status()
+
+                # get the file name from response header
+                content_disposition = r.headers.get("Content-Disposition")
+                filename = content_disposition.split("filename=")[1].strip('"')
+                filename = filename.replace(filename.split(".")[0], entity_id)
+                file_path = os.path.join(output_dir, filename)
+
+                # Skip if .gz or extracted .tif already exists and overwrite is False
+                if (os.path.exists(file_path) or os.path.exists(os.path.splitext(file_path)[0])) and not overwrite:
+                    return filename
+
+                with open(file_path, "wb") as f:
+                    for chunk in r.iter_content(chunk_size=5120000):  # block size of 5 Mo
+                        if chunk:
+                            f.write(chunk)
+            return filename
+        except Exception as e:
+            return f"Error downloading {url}: {e}"
+
+    with ThreadPoolExecutor(max_workers=max_threads) as executor:
+        downloads = executor.map(download, urls)
+        if show_progress:
+            list(tqdm(downloads, total=len(urls), desc="Files"))
+        else:
+            list(downloads)
+
+
+def extract_files_in_place(
+    gz_directory: str,
+    show_progress: bool = True,
+    remove_gz: bool = True,
+    patterns: list[str] = [".gz", ".tgz", ".tar.gz"],
+    max_workers: int = 4,
+) -> None:
+    """
+    Extract all files in the specified folder that match the given pattern (e.g., ".gz"), using multithreading.
+
+    :param gz_directory: Directory containing the compressed files
+    :param show_progress: Display a progress bar if True
+    :param remove_gz: Remove original .gz files after extraction if True
+    :param patterns: List of file extensions to match (e.g., [".gz", ".tgz"]).
+    :param max_workers: Number of threads to use for parallel extraction
+    """
+    files = [f for f in os.listdir(gz_directory) if any(f.lower().endswith(p) for p in patterns)]
+
+    def extract_file(filename: str):
+        file_path = os.path.join(gz_directory, filename)
+        try:
+            if tarfile.is_tarfile(file_path):  # for .tar.gz / .tgz
+                with tarfile.open(file_path, "r:*") as tar:
+                    tar.extractall(path=gz_directory)
+                if remove_gz:
+                    os.remove(file_path)
+                return f"Extracted archive: {filename}"
+            else:  # for .gz single-file
+                output_path = os.path.splitext(file_path)[0]
+                with gzip.open(file_path, "rb") as f_in, open(output_path, "wb") as f_out:
+                    copyfileobj(f_in, f_out)
+                if remove_gz:
+                    os.remove(file_path)
+                return f"Extracted file: {filename}"
+        except Exception as e:
+            return f"Error extracting {filename}: {e}"
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(extract_file, f): f for f in files}
+        if show_progress:
+            for _ in tqdm(as_completed(futures), total=len(futures), desc="Extracting", unit="file"):
+                pass
+        else:
+            for _ in as_completed(futures):
+                pass
+
+
+def optimize_geotifs(
+    geotifs_directory: str, keep: bool = False, max_workers: int = 5, show_progress: bool = True
+) -> None:
+    """
+    Optimize GeoTIFF files in a directory by applying compression and using the BigTIFF format if necessary.
+    The original files can be deleted or kept depending on the 'keep' argument.
+
+    :param geotifs_directory: Directory containing the GeoTIFF files to optimize.
+    :param keep: If False, the original files will be deleted after optimization.
+    :param show_progress: If True, displays a progress bar using tqdm.
+    """
+    # List of files to process
+    files = [f for f in os.listdir(geotifs_directory) if f.endswith(".tif")]
+
+    # Function to optimize a single .tif file
+    def optimize_file(filename: str) -> None:
+        tif = os.path.join(geotifs_directory, filename)
+        tif_optimized = os.path.join(geotifs_directory, f"optimized_{filename}")
+        command = [
+            "gdal_translate",
+            tif,
+            tif_optimized,
+            "-of",
+            "GTiff",
+            "-co",
+            "TILED=YES",
+            "-co",
+            "COMPRESS=LZW",
+            "-co",
+            "BIGTIFF=IF_SAFER",
+        ]
+
+        # Run the gdal_translate command, redirecting output to /dev/null
+        with open(os.devnull, "w") as devnull:
+            subprocess.run(command, check=True, stdout=devnull, stderr=devnull)
+
+        # If 'keep' is False, remove the original file and rename the optimized one
+        if not keep:
+            os.remove(tif)
+            os.rename(tif_optimized, tif)
+
+    # Use ThreadPoolExecutor to run tasks in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit optimization tasks for each file
+        futures = {executor.submit(optimize_file, filename): filename for filename in files}
+
+        if show_progress:
+            for _ in tqdm(as_completed(futures), total=len(futures), desc="Optimizing", unit="file"):
+                pass
+        else:
+            for _ in as_completed(futures):
+                pass
+
+
+def convert_to_geotiff(input_file, output_file):
+    """
+    Convert a raster file in optimized GeoTIFF.
+
+    :param input_file: input raster
+    :param output_file: output GeoTIFF
+    """
+    command = [
+        "gdal_translate",
+        input_file,
+        output_file,
+        "-of",
+        "GTiff",
+        "-co",
+        "TILED=YES",
+        "-co",
+        "COMPRESS=LZW",
+        "-co",
+        "BIGTIFF=IF_SAFER",
+    ]
+
+    try:
+        subprocess.run(command, check=True)
+        print(f"Conversion réussie: {input_file} -> {output_file}")
+    except subprocess.CalledProcessError as e:
+        print(f"Erreur lors de la conversion : {e}")
 
 
 # End-of-file (EOF)

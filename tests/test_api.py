@@ -26,28 +26,20 @@ class TestAPI:
     This class test the API class
     """
 
-    @classmethod
-    def setup_class(cls):
-        cls.api = API(os.getenv("USGS_USERNAME"), os.getenv("USGS_TOKEN"))
-
-    @classmethod
-    def teardown_class(cls):
-        cls.api.logout()
-
-    def test_login(self):
+    def test_login(self, api: API):
         "Test the login to the api"
-        assert self.api.session.headers.get("X-Auth-Token")
+        assert api.session.headers.get("X-Auth-Token")
 
     def test_login_error(self):
         "Test the error of the login"
         with pytest.raises(err.USGSAuthenticationError):
             API("bad_username", "bad_token")
 
-    def test_get_scene_id(self):
+    def test_get_scene_id(self, api: API):
         "Test the convert of display_id to entity_id"
         # Single Product ID
         display_id = "LT05_L1TP_038037_20120505_20200820_02_T1"
-        entity_id = self.api.get_entity_id(display_id, dataset="landsat_tm_c2_l1")
+        entity_id = api.get_entity_id(display_id, dataset="landsat_tm_c2_l1")
         assert entity_id == "LT50380372012126EDC00"
 
         # Multiple Product IDs
@@ -55,42 +47,42 @@ class TestAPI:
             "LT05_L1TP_038037_20120505_20200820_02_T1",
             "LT05_L1TP_031033_20120504_20200820_02_T1",
         ]
-        scene_ids = self.api.get_entity_id(product_ids, dataset="landsat_tm_c2_l1")
+        scene_ids = api.get_entity_id(product_ids, dataset="landsat_tm_c2_l1")
         assert scene_ids == ["LT50380372012126EDC00", "LT50310332012125EDC00"]
 
-    def test_get_entity_id(self):
+    def test_get_entity_id(self, api: API):
         "Test the convert of entity id to display id"
         entity_id = "LT50380372012126EDC00"
-        display_id = self.api.get_display_id(entity_id, dataset="landsat_tm_c2_l1")
+        display_id = api.get_display_id(entity_id, dataset="landsat_tm_c2_l1")
         assert display_id == "LT05_L1TP_038037_20120505_20200820_02_T1"
 
-    def test_scene_search(self):
+    def test_scene_search(self, api: API):
         "Test the scene search method"
         scene_filter = filt.SceneFilter.from_args(date_interval=("1900-01-01", "2024-08-01"))
-        result = self.api.scene_search("landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type="summary")
+        result = api.scene_search("landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type="summary")
 
         assert result["recordsReturned"] == 1
         assert 2900000 <= result["totalHits"] <= 3000000  # the totalHits can changed
         assert result["startingNumber"] == 1
         assert len(result["results"][0]["metadata"]) > 0
 
-    def test_batch_search(self):
+    def test_batch_search(self, api: API):
         "Test the batch search method"
         scenes_count = [30, 30, 30, 10]
         i = 0
 
-        for scenes_batch in self.api.batch_search(
+        for scenes_batch in api.batch_search(
             "declassii", max_results=100, metadata_type="summary", batch_size=30, use_tqdm=False
         ):
             assert len(scenes_batch) == scenes_count[i]
             i += 1
 
-    def test_search(self):
+    def test_search(self, api: API):
         "Test the search method"
-        scenes = self.api.search("declassii", location=(2.2, 46.23), meta_filter="camera=L")
+        scenes = api.search("declassii", location=(2.2, 46.23), meta_filter="camera=L")
         assert len(scenes) == 19
 
-        scenes = self.api.search(
+        scenes = api.search(
             "landsat_tm_c2_l1", bbox=(5.7074, 45.1611, 5.7653, 45.2065), date_interval=("2010-01-01", "2019-12-31")
         )
         assert len(scenes) == 27
@@ -113,15 +105,7 @@ class TestScenesDownloader:
         index=["ei_1", "ei_2", "ei_3", "ei_4"],
     )
 
-    @classmethod
-    def setup_class(cls):
-        cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
-
-    @classmethod
-    def teardown_class(cls):
-        cls.api.logout()
-
-    def test_set_download_options_1(self) -> None:
+    def test_set_download_options_1(self, api: API) -> None:
         """
         Test the method ScenesDownloader.set_download_options with the declassi dataset
         """
@@ -144,9 +128,7 @@ class TestScenesDownloader:
                 pass
 
             # do a download-options request and give the result to the ScenesDownloader instance
-            download_options = self.api.request(
-                "download-options", {"datasetName": "declassii", "entityIds": entity_ids}
-            )
+            download_options = api.request("download-options", {"datasetName": "declassii", "entityIds": entity_ids})
             scenes_downloader.set_download_options(download_options)
 
             # align series to compare it
@@ -154,7 +136,7 @@ class TestScenesDownloader:
             # test if the scenes states correspond to the expected_res
             assert sum(s1 == s2) == 7
 
-    def test_set_download_options_2(self) -> None:
+    def test_set_download_options_2(self, api: API) -> None:
         """
         Test the method ScenesDownloader.set_download_options with a landsat dataset
         """
@@ -177,7 +159,7 @@ class TestScenesDownloader:
                 pass
 
             # do a download-options request and give the result to the ScenesDownloader instance
-            download_options = self.api.request(
+            download_options = api.request(
                 "download-options", {"datasetName": "landsat_tm_c2_l1", "entityIds": entity_ids}
             )
             scenes_downloader.set_download_options(download_options)
@@ -236,10 +218,6 @@ class TestFilter:
     def setup_class(cls):
         cls.api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
         cls.dataset_filters = cls.api.dataset_filters("declassii")
-
-    @classmethod
-    def teardown_class(cls):
-        cls.api.logout()
 
     def test_coordinate(self):
         "Test the coordinate class"
@@ -328,7 +306,7 @@ class TestFilter:
         assert ccf["max"] == 50
         assert ccf["includeUnknown"]
 
-    def test_metadata_value(self):
+    def test_metadata_value(self, declassii_filters):
         # tests for all valid filters
         fields = ["5e839ff8388465fa", "Camera Resolution", "camera_resol"]
         values = ["6", "2 to 4 feet"]
@@ -336,19 +314,19 @@ class TestFilter:
         for field in fields:
             for value in values:
                 f = filt.MetadataValue(field, value)
-                f.compile(self.dataset_filters)
+                f.compile(declassii_filters)
                 assert f == expected_f
 
         # test for all non-valid filters
         with pytest.raises(err.FilterFieldError):
             f = filt.MetadataValue("unknown_field", "unknown_value")
-            f.compile(self.dataset_filters)
+            f.compile(declassii_filters)
 
         with pytest.raises(err.FilterValueError):
             f = filt.MetadataValue("5e839ff8388465fa", "unknown_value")
-            f.compile(self.dataset_filters)
+            f.compile(declassii_filters)
 
-    def test_metadata_and(self):
+    def test_metadata_and(self, declassii_filters):
         "Test the __and__ method with 2 filter"
 
         # Test a and between two MetadataValue filter
@@ -361,7 +339,7 @@ class TestFilter:
             ],
         }
 
-        filter1.compile(self.dataset_filters)
+        filter1.compile(declassii_filters)
         assert filter1 == expected_f
 
         # Test a triple and
@@ -379,10 +357,10 @@ class TestFilter:
                 {"filterType": "value", "filterId": "5e839ff8ba6eead0", "value": "Y", "operand": "like"},
             ],
         }
-        filter2.compile(self.dataset_filters)
+        filter2.compile(declassii_filters)
         assert filter2 == expected_f
 
-    def test_metadata_or(self):
+    def test_metadata_or(self, declassii_filters):
         "Test the __or__ method"
         f = filt.MetadataValue("camera_resol", "6") | filt.MetadataValue("camera", "H")
         f = f | filt.MetadataValue("DOWNLOAD_AVAILABLE", "Yes")
@@ -401,11 +379,11 @@ class TestFilter:
             ],
         }
 
-        f.compile(self.dataset_filters)
+        f.compile(declassii_filters)
 
         assert f == expected_f
 
-    def test_metadata_filter_from_str(self):
+    def test_metadata_filter_from_str(self, declassii_filters):
         "Test the from_str constructor for MetadataFilter"
         str_repr = "camera_resol=6 & camera='H' | 'Download Available' = Yes"
         f = filt.MetadataFilter.from_str(str_repr)
@@ -422,7 +400,7 @@ class TestFilter:
                 },
             ],
         }
-        f.compile(self.dataset_filters)
+        f.compile(declassii_filters)
         assert f == expected_f
 
         # test Error

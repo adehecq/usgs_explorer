@@ -22,12 +22,10 @@ from usgsxplore.utils import (
 
 
 @pytest.fixture(scope="module")
-def scenes_metadata() -> list[dict]:
-    api = API(os.getenv("USGS_USERNAME"), token=os.getenv("USGS_TOKEN"))
+def scenes_metadata(api: API) -> list[dict]:
     scenes = []
     for batch_scenes in api.batch_search("declassii", None, 10, "full", 0):
         scenes += batch_scenes
-    api.logout()
     return scenes
 
 

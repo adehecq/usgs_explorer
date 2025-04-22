@@ -9,6 +9,7 @@ Author: Luc Godin
 
 import datetime
 import json
+import os
 import random
 import signal
 import string
@@ -20,15 +21,15 @@ from urllib.parse import urljoin
 import requests
 from tqdm import tqdm
 
-from usgsxplore.errors import (
-    ScenesNotFound,
-    USGSAuthenticationError,
-    USGSError,
-    USGSInvalidDataset,
-    USGSRateLimitError,
-)
+import usgsxplore.errors as err
 from usgsxplore.filter import SceneFilter
 from usgsxplore.scenes_downloader import ScenesDownloader
+from usgsxplore.utils import (
+    download_files,
+    extract_files_in_place,
+    optimize_geotifs,
+    process_download_options,
+)
 
 API_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 
@@ -62,12 +63,12 @@ class API:
         error_msg = data.get("errorMessage")
         if error_code:
             if error_code in ("AUTH_INVALID", "AUTH_UNAUTHROIZED", "AUTH_KEY_INVALID"):
-                raise USGSAuthenticationError(f"{error_code}: {error_msg}.")
+                raise err.USGSAuthenticationError(f"{error_code}: {error_msg}.")
             if error_code == "RATE_LIMIT":
-                raise USGSRateLimitError(f"{error_code}: {error_msg}.")
+                raise err.USGSRateLimitError(f"{error_code}: {error_msg}.")
             if error_code == "DATASET_INVALID":
-                raise USGSInvalidDataset(f"{error_code}: {error_msg}.")
-            raise USGSError(f"{error_code}: {error_msg}.")
+                raise err.USGSInvalidDataset(f"{error_code}: {error_msg}.")
+            raise err.USGSError(f"{error_code}: {error_msg}.")
 
     def request(self, endpoint: str, params: dict = None, retries: int = 1, timeout: int = 40) -> dict:
         """
@@ -99,7 +100,7 @@ class API:
 
                 self.raise_api_error(response)
                 return response.json().get("data")
-            except USGSRateLimitError:
+            except err.USGSRateLimitError:
                 if attempt < retries:
                     if self.debug_mode:
                         print("[DEBUG] Rate limit hit, retrying in 3s...")
@@ -339,7 +340,109 @@ class API:
         )
         return r
 
+    def get_download_links(self, dataset: str, entity_ids: list[str], label: str = "usgsxplore"):
+        """
+        Get all download URLs for the given dataset and entity IDs.
+
+        :param dataset: Dataset name or alias.
+        :param entity_ids: List of entity IDs to download.
+        :yield: dict {entityId: str, url: str}.
+        """
+        download_options = self.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
+        download_options = process_download_options(download_options)
+
+        download_list = [{"entityId": opt["entityId"], "productId": opt["id"]} for opt in download_options]
+        download_request = self.request("download-request", {"downloads": download_list, "label": label})
+
+        download_ids = []
+        # first download all scenes in availableDownloads from the download-request
+        for download in download_request["availableDownloads"]:
+            download_ids.append(download["downloadId"])
+            yield {"entityId": download["entityId"], "url": download["url"]}
+
+        # then loop with download-retrieve request every 30 sec to get
+        # all download link
+        while True:
+            retrieve_results = self.request("download-retrieve", {"label": label})
+            # loop in all link "available" and "requested" and download it
+            # with the Product.download method
+            for download in retrieve_results["available"]:
+                if download["downloadId"] not in download_ids:
+                    download_ids.append(download["downloadId"])
+                    yield {"entityId": download["entityId"], "url": download["url"]}
+
+            # if all the link are not ready yet, sleep 30 sec and loop, else exit from the loop
+            if len(download_ids) < (len(download_list) - len(download_request["failed"])):
+                time.sleep(30)
+            else:
+                break
+
     def download(
+        self,
+        dataset: str,
+        entity_ids: list[str],
+        output_dir: str = ".",
+        overwrite: bool = False,
+        max_workers: int = 5,
+        show_progress: bool = True,
+        extract: bool = True,
+        optimize: bool = True,
+        verbose: bool = False,
+    ) -> None:
+        """Download GTiff images identify from their entity id, use the M2M API.
+
+        Args:
+            dataset (str): Alias dataset of scenes wanted
+            entity_ids (list[str]): list of entity id of scenes wanted
+            output_dir (str, optional): output directory to store GTiff images. Defaults to ".".
+            overwrite (bool, optional): overwrite existing images. Defaults to False.
+            max_workers (int, optional): maximum number of thread. Defaults to 5.
+            show_progress (bool, optional): show a progress bar. Defaults to True.
+            extract (bool, optional): extract in place images. Defaults to True.
+            optimize (bool, optional): optimized in place images with gdal_translate. Defaults to True.
+            verbose (bool, optional): print information. Defaults to False.
+        """
+        if not extract and optimize:
+            raise err.APIInvalidParameters("Can't optimized if extract is False")
+
+        # Filter out already existing files unless overwrite is True
+        initial_count = len(entity_ids)
+        if not overwrite and os.path.exists(output_dir):
+            entity_ids = [eid for eid in entity_ids if not any(f.startswith(eid) for f in os.listdir(output_dir))]
+            skipped_count = initial_count - len(entity_ids)
+            if verbose:
+                print(f"[INFO] Skipped {skipped_count} already downloaded images")
+
+        if not entity_ids:
+            if verbose:
+                print("[INFO] All requested images are already downloaded.")
+            return
+
+        label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+        if verbose:
+            print(f"[INFO] Fetching download links for {len(entity_ids)} scenes...")
+
+        urls = list(self.get_download_links(dataset, entity_ids, label))
+
+        if verbose:
+            print(f"[INFO] Downloading {len(urls)} files to {output_dir}")
+
+        download_files(urls, output_dir, max_workers, overwrite, show_progress)
+        if extract:
+            if verbose:
+                print(f"[INFO] Extracting files in {output_dir}")
+            extract_files_in_place(output_dir, show_progress, max_workers=max_workers)
+
+        if optimize:
+            if verbose:
+                print(f"[INFO] Optimizing GeoTIFFs in {output_dir}")
+            optimize_geotifs(output_dir, max_workers=max_workers, show_progress=show_progress)
+
+        if verbose:
+            print("[INFO] Download process completed.")
+
+    def download_old(
         self,
         dataset: str,
         entity_ids: list[str],
@@ -347,7 +450,8 @@ class API:
         max_thread: int = 5,
         overwrite: bool = False,
         pbar_type: int = 2,
-    ) -> None:
+        dry_run: bool = False,
+    ) -> list[str]:
         """
         Download GTiff images identify from their entity id, use the M2M API. Progress of
         the downloading can be displayed in terms of the p_bar_type given.
@@ -357,17 +461,17 @@ class API:
         :param output_dir: output directory to store GTiff images
         :param max_thread: maximum number of thread that would be used for the downloading
         :param p_bar_type: way to display progress bar (0: no pbar, 1: one pbar, 2: pbar for each scenes)
+        :param dry_run: If True, skips actual download and only returns download URLs.
+        :return: List of download URLs .
         """
-        # first clean the residus of previous download
-        self.clean_download()
+        os.makedirs(output_dir, exist_ok=True)
 
         scenes_downloader = ScenesDownloader(entity_ids, output_dir, max_thread, pbar_type, overwrite)
 
         # get download-options and send it to the scenes_downloader
         download_options = self.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
-        if download_options is None:
-            raise ScenesNotFound(f"No scenes found in the dataset '{dataset}'.")
-        scenes_downloader.set_download_options(download_options)
+
+        scenes_downloader.set_download_options(process_download_options(download_options))
 
         # send a download-request with parsed products
         download_list = scenes_downloader.get_downloads()
@@ -381,11 +485,14 @@ class API:
 
         signal.signal(signal.SIGINT, _handle_sigint)
 
-        # first download all scenes in availableDownloads from the download-request
         download_ids = []
+        download_urls = []
+        # first download all scenes in availableDownloads from the download-request
         for download in request_results["availableDownloads"]:
             download_ids.append(download["downloadId"])
-            scenes_downloader.download(download["entityId"], download["url"])
+            download_urls.append(download["url"])
+            if not dry_run:
+                scenes_downloader.download(download["entityId"], download["url"])
 
         # then loop with download-retrieve request every 30 sec to get
         # all download link
@@ -396,7 +503,9 @@ class API:
             for download in retrieve_results["available"] + retrieve_results["requested"]:
                 if download["downloadId"] not in download_ids:
                     download_ids.append(download["downloadId"])
-                    scenes_downloader.download(download["entityId"], download["url"])
+                    download_urls.append(download["url"])
+                    if not dry_run:
+                        scenes_downloader.download(download["entityId"], download["url"])
 
             # if all the link are not ready yet, sleep 30 sec and loop, else exit from the loop
             if len(download_ids) < (len(download_list) - len(request_results["failed"])):
@@ -405,8 +514,70 @@ class API:
                 break
 
         # cleanup the download order and wait all thread to finish
-        self.clean_download()
-        scenes_downloader.wait_all_thread()
+        if not dry_run:
+            self.clean_download()
+            scenes_downloader.wait_all_thread()
+
+        return download_urls
+
+    def download_calibration_report(
+        self, dataset: str, entity_id: str, output_dir: str = ".", calibration_report_product_id="D555"
+    ) -> None:
+        """
+        Downloads the calibration report for a given dataset and entityId, and saves it to the specified directory.
+
+        This method searches for available download options matching the given calibration report product ID,
+        sends a download request, and writes the resulting file to disk.
+
+        :param dataset: Name of the dataset to query.
+        :param entity_id: The unique identifier of the entity (scene).
+        :param output_dir: The directory where the calibration report will be saved. Defaults to the current directory.
+        :param calibration_report_product_id: Product code for the calibration report. Defaults to "D555".
+        :return: None
+        :raises CalibrationReportNotFound: If no calibration report is available for the entity.
+        :raises USGSError: If no downloadable file is returned after the request.
+        """
+        # Request available download options for the entity
+        download_options = self.request("download-options", {"datasetName": dataset, "entityIds": [entity_id]})
+
+        # Filter to find the calibration report by productCode
+        calibrations_ids = [
+            opt["id"]
+            for opt in download_options
+            if opt["available"] and opt["productCode"] == calibration_report_product_id
+        ]
+
+        # Raise an error if no calibration report was found
+        if len(calibrations_ids) == 0:
+            raise err.CalibrationReportNotFound("No calibration report found.")
+
+        # Prepare download request with the found product ID
+        download_list = [{"entityId": entity_id, "productId": calibrations_ids[0]}]
+        request_results = self.request("download-request", {"downloads": download_list, "label": "test"})
+
+        # Merge available and preparing downloads
+        downloads = request_results["availableDownloads"] + request_results["preparingDownloads"]
+
+        # Raise an error if no file is ready for download
+        if len(downloads) == 0:
+            raise err.USGSError("Download error.")
+
+        # Extract the file download URL
+        url = downloads[0]["url"]
+
+        # Perform the actual download and save the file
+        with requests.get(url, stream=True) as response:
+            response.raise_for_status()
+
+            # Extract filename from the 'Content-Disposition' header
+            content_disposition = response.headers.get("Content-Disposition")
+            filename = content_disposition.split("filename=")[1].strip('"')
+
+            # Write the file to the output directory
+            with open(os.path.join(output_dir, filename), "wb") as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    if chunk:  # Skip keep-alive chunks
+                        f.write(chunk)
 
     def clean_download(self) -> None:
         """

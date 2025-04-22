@@ -250,7 +250,6 @@ def download(
     """
     api = API(username, token)
     entity_ids = read_textfile(textfile)
-    os.makedirs(output_dir, exist_ok=True)
     api.download(dataset, entity_ids, output_dir, max_thread, overwrite, pbar)
     api.logout()
 

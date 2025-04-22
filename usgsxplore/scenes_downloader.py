@@ -54,12 +54,11 @@ class ScenesDownloader:
         :param download_options: result of a download-options request
         """
         for download_option in download_options:
-            if download_option["downloadSystem"] in ["dds", "ls_zip"]:
-                entity_id = download_option["entityId"]
-                if self.df.loc[entity_id, "filesize"] is None or self.df.loc[entity_id, "filesize"] == 0:
-                    self.df.loc[entity_id, "product_id"] = download_option["id"]
-                    self.df.loc[entity_id, "display_id"] = download_option["displayId"]
-                    self.df.loc[entity_id, "filesize"] = download_option["filesize"]
+            entity_id = download_option["entityId"]
+            if self.df.loc[entity_id, "filesize"] is None or self.df.loc[entity_id, "filesize"] == 0:
+                self.df.loc[entity_id, "product_id"] = download_option["id"]
+                self.df.loc[entity_id, "display_id"] = download_option["displayId"]
+                self.df.loc[entity_id, "filesize"] = download_option["filesize"]
 
         # if not overwrite set already_download to True to scenes already downloaded
         if not self._overwrite:

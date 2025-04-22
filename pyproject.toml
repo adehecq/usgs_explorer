@@ -27,6 +27,7 @@ pytest = "^8.2.2"
 pytest-cov = "^5.0.0"
 flake8 = "^7.1.0"
 pre-commit = "^3.7.1"
+ipykernel = "^6.29.5"
 
 [tool.poetry.scripts]
 usgsxplore = "usgsxplore.cli:cli"
