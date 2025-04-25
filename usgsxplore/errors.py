@@ -84,3 +84,11 @@ class SceneFilterError(Exception):
 
 class ScenesNotFound(Exception):
     """Error raise when no scenes are founds"""
+
+
+class CalibrationReportNotFound(Exception):
+    """Error raise when no calibration report are founds"""
+
+
+class DownloadOptionsError(Exception):
+    """Custom exception for errors during download options processing."""

@@ -6,25 +6,22 @@ Description: Command line interface of the usgsxplore
 Last modified: 2024
 Author: Luc Godin
 """
+
 import json
 import os
 
 import click
 import geopandas as gpd
 
+import usgsxplore.utils as utils
 from usgsxplore.api import API
-from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
-from usgsxplore.filter import SceneFilter
-from usgsxplore.utils import (
-    download_browse_img,
-    format_table,
-    read_textfile,
-    save_in_gfile,
-    save_in_html,
-    sort_strings_by_similarity,
-    to_gdf,
-    update_gdf_browse,
+from usgsxplore.errors import (
+    DownloadOptionsError,
+    FilterFieldError,
+    FilterValueError,
+    USGSInvalidDataset,
 )
+from usgsxplore.filter import SceneFilter
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -75,7 +72,11 @@ def is_text_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
 def is_vector_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
     "callback for verify the validity of the vector file"
     if not value.endswith((".shp", ".gpkg", ".geojson")):
-        raise click.BadParameter(f"'{value}' must be a vector data file (.gpkg, .shp, .geojson)", ctx=ctx, param=param)
+        raise click.BadParameter(
+            f"'{value}' must be a vector data file (.gpkg, .shp, .geojson)",
+            ctx=ctx,
+            param=param,
+        )
     return value
 
 
@@ -95,7 +96,12 @@ def cli() -> None:
 # ----------------------------------------------------------------------------------------------------
 @click.command()
 @click.option(
-    "-u", "--username", type=click.STRING, required=True, help="EarthExplorer username.", envvar="USGS_USERNAME"
+    "-u",
+    "--username",
+    type=click.STRING,
+    required=True,
+    help="EarthExplorer username.",
+    envvar="USGS_USERNAME",
 )
 @click.option(
     "-t",
@@ -203,16 +209,16 @@ def search(
                         json.dump(scenes, f, indent=4)
 
                 elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                    gdf = to_gdf(scenes)
+                    gdf = utils.to_gdf(scenes)
                     if file.endswith(".html"):
-                        save_in_html(gdf, file)
+                        utils.save_in_html(gdf, file)
                     else:
-                        save_in_gfile(gdf, file)
+                        utils.save_in_gfile(gdf, file)
 
     # if dataset is invalid print a list of similar dataset for the user
     except USGSInvalidDataset:
         datasets = api.dataset_names()
-        sorted_datasets = sort_strings_by_similarity(dataset, datasets)[:50]
+        sorted_datasets = utils.sort_strings_by_similarity(dataset, datasets)[:50]
         choices = " | ".join(sorted_datasets)
         click.echo(f"Invalid dataset : '{dataset}', it must be in :\n {choices}")
     # print only the message when a filter error is raise
@@ -226,32 +232,96 @@ def search(
 # 									DOWNLOAD COMMAND
 # ----------------------------------------------------------------------------------------------------
 @click.command()
-@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
-@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=True, envvar="USGS_TOKEN")
+@click.option(
+    "-u",
+    "--username",
+    type=click.STRING,
+    help="EarthExplorer username.",
+    envvar="USGS_USERNAME",
+)
+@click.option(
+    "-t",
+    "--token",
+    type=click.STRING,
+    help="EarthExplorer token.",
+    required=True,
+    envvar="USGS_TOKEN",
+)
 @click.argument("textfile", type=click.Path(exists=True, file_okay=True), callback=is_text_file)
-@click.option("--dataset", "-d", type=click.STRING, required=False, help="Dataset", callback=read_dataset_textfile)
-@click.option("--output-dir", "-o", type=click.Path(dir_okay=True), default=".", help="Output directory")
-@click.option("--pbar", "-b", type=click.IntRange(0, 2), default=2, help="Type of progression displaying (0,1,2)")
-@click.option("--max-thread", "-m", type=click.INT, default=5, help="Max thread number (default: 5)")
+@click.option(
+    "--dataset",
+    "-d",
+    type=click.STRING,
+    required=False,
+    help="Dataset",
+    callback=read_dataset_textfile,
+)
+@click.option(
+    "--product-number",
+    "-p",
+    type=click.INT,
+    required=False,
+    help="The product index you want (default: None)",
+    default=None,
+)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(dir_okay=True),
+    default=".",
+    help="Output directory",
+)
+@click.option(
+    "--max-workers",
+    "-m",
+    type=click.INT,
+    default=5,
+    help="Max thread number (default: 5)",
+)
 @click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files")
+@click.option("--hide-pbar", is_flag=True, default=False, help="Hide the progress bar")
+@click.option("--no-extract", is_flag=True, default=False, help="Skip the extraction of files")
+@click.option(
+    "--no-optimized",
+    is_flag=True,
+    default=False,
+    help="Skip the optimization of tif images",
+)
 def download(
     username: str,
     token: str,
     textfile: str,
     dataset: str,
+    product_number: int | None,
     output_dir: str,
-    pbar: int,
-    max_thread: int,
+    max_workers: int,
     overwrite: bool,
+    hide_pbar: bool,
+    no_extract: bool,
+    no_optimized: bool,
 ) -> None:
     """
     Download scenes with their entity ids provided in the textfile.
     The dataset can also be provide in the first line of the textfile : #dataset=declassii
     """
     api = API(username, token)
-    entity_ids = read_textfile(textfile)
-    os.makedirs(output_dir, exist_ok=True)
-    api.download(dataset, entity_ids, output_dir, max_thread, overwrite, pbar)
+    entity_ids = utils.read_textfile(textfile)
+    try:
+        api.download(
+            dataset,
+            entity_ids,
+            product_number,
+            output_dir,
+            overwrite,
+            max_workers,
+            show_progress=not hide_pbar,
+            extract=not no_extract,
+            optimize=not no_optimized,
+        )
+    except DownloadOptionsError as e:
+        click.echo(
+            f"{str(e)}\nPlease specify the number of the product you want by using the option -p or --product-number."
+        )
     api.logout()
 
 
@@ -280,11 +350,11 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     url_list = gdf["browse_url"].tolist()
 
     # download the list of url with download_browse_img
-    _ = download_browse_img(url_list, output_dir, pbar)
+    _ = utils.download_browse_img(url_list, output_dir, pbar)
 
     # update the vector file with browse_path added
-    gdf = update_gdf_browse(gdf, output_dir)
-    save_in_gfile(gdf, vector_file)
+    gdf = utils.update_gdf_browse(gdf, output_dir)
+    utils.save_in_gfile(gdf, vector_file)
 
 
 @click.group()
@@ -295,8 +365,21 @@ def info() -> None:
 
 
 @click.command()
-@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
-@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=True, envvar="USGS_TOKEN")
+@click.option(
+    "-u",
+    "--username",
+    type=click.STRING,
+    help="EarthExplorer username.",
+    envvar="USGS_USERNAME",
+)
+@click.option(
+    "-t",
+    "--token",
+    type=click.STRING,
+    help="EarthExplorer token.",
+    required=True,
+    envvar="USGS_TOKEN",
+)
 @click.option("-a", "--all", is_flag=True, help="display also all event dataset")
 def dataset(username: str, token: str, all: bool) -> None:
     """
@@ -312,8 +395,21 @@ def dataset(username: str, token: str, all: bool) -> None:
 
 
 @click.command()
-@click.option("-u", "--username", type=click.STRING, help="EarthExplorer username.", envvar="USGS_USERNAME")
-@click.option("-t", "--token", type=click.STRING, help="EarthExplorer token.", required=True, envvar="USGS_TOKEN")
+@click.option(
+    "-u",
+    "--username",
+    type=click.STRING,
+    help="EarthExplorer username.",
+    envvar="USGS_USERNAME",
+)
+@click.option(
+    "-t",
+    "--token",
+    type=click.STRING,
+    help="EarthExplorer token.",
+    required=True,
+    envvar="USGS_TOKEN",
+)
 @click.argument("dataset", type=click.STRING)
 def filters(username: str, token: str, dataset: str) -> None:
     """
@@ -323,8 +419,14 @@ def filters(username: str, token: str, dataset: str) -> None:
     dataset_filters = api.dataset_filters(dataset)
     table = [["field id", "field lbl", "field sql"]]
     for _i, filt in enumerate(dataset_filters):
-        table.append([filt["id"], filt["fieldLabel"], filt["searchSql"].split(" ", maxsplit=1)[0]])
-    click.echo(format_table(table))
+        table.append(
+            [
+                filt["id"],
+                filt["fieldLabel"],
+                filt["searchSql"].split(" ", maxsplit=1)[0],
+            ]
+        )
+    click.echo(utils.format_table(table))
 
     api.logout()
 

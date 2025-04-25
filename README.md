@@ -40,7 +40,7 @@ pipx install usgsxplore
 
 # Usage
 
-**usgsxplore** can be used both through its command-line interface and as a python module.
+**usgsxplore** can be used both through its command-line interface and as a python module (example : [download.ipynb](./examples/download.ipynb)).
 
 ## Command-line interface
 
@@ -68,14 +68,11 @@ Commands:
 
 Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/). Note that you need to specify specifically all datasets you plan to access through the API.
 
-Either one of the password or token must be provided.
-
-`--username` and `--token` or `--password` can be provided as command-line options or as environment variables:
+`--username` and `--token` can be provided as command-line options or as environment variables:
 
 ``` shell
 export USGS_USERNAME=<your_username>
 export USGS_TOKEN=<your_token>
-export USGS_PASSWORD=<your_password>
 ```
 
 ### Searching
@@ -143,20 +140,20 @@ Usage: usgsxplore download [OPTIONS] TEXTFILE
   can also be provide in the first line of the textfile : #dataset=declassii
 
 Options:
-  -u, --username TEXT       EarthExplorer username.
-  -p, --password TEXT       EarthExplorer password.
-  -t, --token TEXT          EarthExplorer token.
-  -d, --dataset TEXT        Dataset
-  -o, --output-dir PATH     Output directory
-  -b, --pbar INTEGER RANGE  Type of progression displaying (0,1,2)  [0<=x<=2]
-  -m, --max-thread INTEGER  Max thread number (default: 5)
-  --overwrite               Overwrite existing files
-  --help                    Show this message and exit.
+  -u, --username TEXT           EarthExplorer username.
+  -t, --token TEXT              EarthExplorer token.  [required]
+  -d, --dataset TEXT            Dataset
+  -p, --product-number INTEGER  The product index you want (default: None)
+  -o, --output-dir PATH         Output directory
+  -m, --max-workers INTEGER     Max thread number (default: 5)
+  --overwrite                   Overwrite existing files
+  --hide-pbar                   Hide the progress bar
+  --no-extract                  Skip the extraction of files
+  --no-optimized                Skip the optimization of tif images
+  --help                        Show this message and exit.
 ```
-This command download scenes from their entity ids in the `TEXTFILE` and save the results in `--output-dir`. It can display different type of progression depends on `--pbar` value:
-- **0** : display nothing.
-- **1** : display one progress bar for all scenes downloading.
-- **2** : display a progress bar for each scenes downloading, with state information.
+This command download scenes from their entity ids in the `TEXTFILE` and save the results in `--output-dir`.
+It also extract file and optimize with `gdal_translate`.
 
 ### Downloading browse
 

@@ -163,3 +163,13 @@ cython_debug/
 
 # ignore the tmp.py
 tmp.py
+
+# ignore all generated things in the examples folder except of the notebook
+examples/*
+!examples/download.ipynb
+
+# ignore vscode things
+.vscode
+
+# ingore ruff cache
+.ruff_cache/

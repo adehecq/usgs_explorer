@@ -29,11 +29,11 @@ jobs:
     - name: Install dependencies
       run: poetry install
 
-    - name: Lint with flake8
-      run: poetry run flake8 . --max-line-length=127
+    - name: Lint with Ruff
+      run: poetry run ruff check .
 
     - name: Run Pytest
       env:
         USGS_USERNAME: ${{ secrets.USGSXPLORE_USERNAME }}
         USGS_TOKEN: ${{ secrets.USGSXPLORE_TOKEN }}
-      run: poetry run pytest --ignore=tests/test_download.py -k "not test_download"
+      run: poetry run pytest

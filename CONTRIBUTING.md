@@ -15,8 +15,10 @@ poetry run pre-commit install
 
 Before committing make sure to passed all tests:
 ```bash
-poetry run pytest --ignore=tests/test_download.py -k "not test_download"
+poetry run pytest
 ```
+
+You can also run the notebooks : [download.ipynb](./examples/download.ipynb)
 
 ## Examples of commands
 ```bash
