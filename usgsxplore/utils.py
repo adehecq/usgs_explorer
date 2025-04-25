@@ -6,8 +6,11 @@ Author: Luc Godin
 """
 import gzip
 import os
+import signal
 import subprocess
+import sys
 import tarfile
+import threading
 import warnings
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
@@ -20,6 +23,8 @@ import pandas as pd
 import requests
 from shapely import MultiPolygon, Point, Polygon
 from tqdm import tqdm
+
+from usgsxplore.errors import DownloadOptionsError
 
 
 def to_gdf(scenes_metadata: list[dict]) -> None:
@@ -268,61 +273,86 @@ def convert_response_to_df(scenes_metadata: list[dict]) -> pd.DataFrame:
     return pd.DataFrame(data=attributes)
 
 
-def process_download_options(download_options: list[dict], priority_list: list[str] = ["D187"]) -> list[dict]:
+def process_download_options(download_options: list[dict], product_number: int | None = None) -> list[dict] | None:
     """
-    Filters and selects one download option per entityId from a list of download options,
-    prioritizing options whose 'productCode' is in a given priority list.
+    Filters and selects download options based on availability and product selection.
 
-    Only 'available' options are considered. If multiple options exist for the same entityId,
-    the last one in the list that is marked as priority will be selected.
+    Args:
+        download_options (list[dict]): A list of download option dictionaries,
+            each containing at least 'available', 'entityId', 'productCode', and 'productName' keys.
+        product_number (int | None, optional): Index of the product to select if multiple are found.
+            If None and multiple products are found, an exception is raised.
 
-    :param download_options: A list of dictionaries representing download options.
-                             Each dict must contain 'available', 'entityId', and 'productCode' keys.
-    :param priority_list: A list of prioritized product codes. If an option has a productCode in this list,
-                          it will replace any previously selected option for the same entityId.
-    :return: A list of selected download options, one per unique entityId.
+    Returns:
+        list[dict]: A list of download options matching the selected product code.
+
+    Raises:
+        DownloadOptionsError: If no available products are found, multiple options require a choice,
+                              or the given product_number is invalid.
     """
-    # Convert priority list to a set for faster lookup
-    priority_list = set(priority_list)
 
-    # Dictionary to hold the final selected option per entityId
-    final_download_options = {}
+    # Filter only the available options
+    available_options = [opt for opt in download_options if opt.get("available")]
 
-    # Loop through all download options
-    for download_option in download_options:
-        if download_option["available"]:
-            # If no option has been selected yet for this entityId,
-            # or if the current option is a priority, select/replace it
-            if (
-                download_option["entityId"] not in final_download_options
-                or download_option["productCode"] in priority_list
-            ):
-                final_download_options[download_option["entityId"]] = download_option
+    if not available_options:
+        raise DownloadOptionsError("No product available")
 
-    # Convert the dictionary values to a list of selected options
-    return list(final_download_options.values())
+    # Use the entityId of the first available product to group similar products
+    entity_id = available_options[0]["entityId"]
+    product_list = []
+
+    # Collect all options that belong to the same entityId group
+    for opt in available_options:
+        if entity_id != opt["entityId"]:
+            break
+        product_list.append(opt)
+
+    # Handle case where multiple products are found
+    if len(product_list) > 1:
+        if product_number is None:
+            product_names = "\n".join(f" - {i} : {p['productName']}" for i, p in enumerate(product_list))
+            raise DownloadOptionsError(f"Multiple products found, you need to choose one:\n{product_names}")
+        if not (0 <= product_number < len(product_list)):
+            product_names = "\n".join(f" - {i} : {p['productName']}" for i, p in enumerate(product_list))
+            raise DownloadOptionsError(f"Invalid product number: {product_number}, choose one of:\n{product_names}")
+        selected_code = product_list[product_number]["productCode"]
+    else:
+        selected_code = product_list[0]["productCode"]
+
+    return [opt for opt in available_options if opt["productCode"] == selected_code]
 
 
-def download_files(
-    urls: list[dict],
+def download_scenes(
+    scenes: list[dict],
     output_dir: str = ".",
     max_threads: int = 5,
-    overwrite: bool = False,
     show_progress: bool = True,
 ):
     """
-    Download files from a list of dicts with 'entityId' and 'url'.
+    Download files from a list of dicts with 'entityId', 'url' and 'filesize'.
     The filename will be: {entityId}.{extension}
 
-    :param urls: List of dicts like {'entityId': str, 'url': str}
+    :param scenes: List of dicts like {'entityId': str, 'url': str, 'filesize': int}
     :param output_dir: Directory to save the downloaded files
     :param max_threads: Number of concurrent download threads
-    :param overwrite: Whether to overwrite files if they already exist
     :param show_progress: Whether to display a progress bar
     :return: None
     """
     os.makedirs(output_dir, exist_ok=True)
     session = requests.Session()
+
+    # Total size of all files
+    total_size = sum(int(item.get("filesize", 0)) for item in scenes)
+    progress_bar = (
+        tqdm(total=total_size, unit="B", unit_scale=True, desc=f"Downloading (0/{len(scenes)})")
+        if show_progress
+        else None
+    )
+
+    tqdm.set_lock(threading.Lock())  # Make tqdm thread-safe
+
+    # Create a stop event that can be used to interrupt the download
+    stop_event = threading.Event()
 
     def download(item: dict):
         url = item.get("url")
@@ -337,24 +367,35 @@ def download_files(
                 filename = filename.replace(filename.split(".")[0], entity_id)
                 file_path = os.path.join(output_dir, filename)
 
-                # Skip if .gz or extracted .tif already exists and overwrite is False
-                if (os.path.exists(file_path) or os.path.exists(os.path.splitext(file_path)[0])) and not overwrite:
-                    return filename
-
                 with open(file_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=5120000):  # block size of 5 Mo
-                        if chunk:
-                            f.write(chunk)
+                    for chunk in r.iter_content(chunk_size=10000 * 1024):  # block size of 10 Mo
+                        if stop_event.is_set():  # Check if stop_event has been set to stop download
+                            os.remove(file_path)
+                            break
+
+                        f.write(chunk)
+                        if progress_bar:
+                            progress_bar.update(len(chunk))
             return filename
         except Exception as e:
             return f"Error downloading {url}: {e}"
 
+    def signal_handler(sig, frame):
+        print("\nDownload interrupted.")
+        stop_event.set()  # Set the stop event to signal all threads to stop
+        if progress_bar:
+            progress_bar.close()  # Ensure the progress bar is closed properly
+        sys.exit(0)  # Exit gracefully
+
+    signal.signal(signal.SIGINT, signal_handler)
+
     with ThreadPoolExecutor(max_workers=max_threads) as executor:
-        downloads = executor.map(download, urls)
-        if show_progress:
-            list(tqdm(downloads, total=len(urls), desc="Files"))
-        else:
-            list(downloads)
+        for i, result in enumerate(executor.map(download, scenes), start=1):
+            if progress_bar:
+                progress_bar.set_description(f"Downloading ({i}/{len(scenes)})")
+
+    if progress_bar:
+        progress_bar.close()
 
 
 def extract_files_in_place(
@@ -456,34 +497,6 @@ def optimize_geotifs(
         else:
             for _ in as_completed(futures):
                 pass
-
-
-def convert_to_geotiff(input_file, output_file):
-    """
-    Convert a raster file in optimized GeoTIFF.
-
-    :param input_file: input raster
-    :param output_file: output GeoTIFF
-    """
-    command = [
-        "gdal_translate",
-        input_file,
-        output_file,
-        "-of",
-        "GTiff",
-        "-co",
-        "TILED=YES",
-        "-co",
-        "COMPRESS=LZW",
-        "-co",
-        "BIGTIFF=IF_SAFER",
-    ]
-
-    try:
-        subprocess.run(command, check=True)
-        print(f"Conversion réussie: {input_file} -> {output_file}")
-    except subprocess.CalledProcessError as e:
-        print(f"Erreur lors de la conversion : {e}")
 
 
 # End-of-file (EOF)

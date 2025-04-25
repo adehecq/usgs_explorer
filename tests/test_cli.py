@@ -4,6 +4,7 @@ Description: module contain the unitary tests for the CLI
 Last modified: 2024
 Author: Luc Godin
 """
+
 import os
 from tempfile import TemporaryDirectory
 
@@ -18,7 +19,15 @@ def test_search_no_output():
     runner = CliRunner()
     result = runner.invoke(
         cli,
-        ["search", "declassii", "--location", "23.1", "80", "--filter", "DOWNLOAD_AVAILABLE=Y"],
+        [
+            "search",
+            "declassii",
+            "--location",
+            "23.1",
+            "80",
+            "--filter",
+            "DOWNLOAD_AVAILABLE=Y",
+        ],
     )
     assert result.exit_code == 0
     assert "DZB1212-500010L002001" in result.output
@@ -67,13 +76,14 @@ def test_download():
     with TemporaryDirectory() as tmpdir:
         ids_file = os.path.join(tmpdir, "ids.txt")
         with open(ids_file, "w", encoding="utf-8") as file:
-            file.write("#dataset=landsat_tm_c2_l1\nLT50380372012126EDC00")
+            file.write("#dataset=aerial_combin\nARBCSRD00010006\nARBCSRD00010007")
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["download", ids_file, "--output-dir", tmpdir, "--pbar", "0"])
+        result = runner.invoke(cli, ["download", ids_file, "--output-dir", tmpdir, "--hide-pbar", "-p", 0])
 
         assert result.exit_code == 0
-        assert "LT05_L1TP_038037_20120505_20200820_02_T1.tar" in os.listdir(tmpdir)
+        assert "ARBCSRD00010006.tif" in os.listdir(tmpdir)
+        assert "ARBCSRD00010007.tif" in os.listdir(tmpdir)
 
 
 def test_info():

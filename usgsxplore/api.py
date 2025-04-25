@@ -11,9 +11,7 @@ import datetime
 import json
 import os
 import random
-import signal
 import string
-import sys
 import time
 from collections.abc import Generator
 from urllib.parse import urljoin
@@ -23,9 +21,8 @@ from tqdm import tqdm
 
 import usgsxplore.errors as err
 from usgsxplore.filter import SceneFilter
-from usgsxplore.scenes_downloader import ScenesDownloader
 from usgsxplore.utils import (
-    download_files,
+    download_scenes,
     extract_files_in_place,
     optimize_geotifs,
     process_download_options,
@@ -340,25 +337,42 @@ class API:
         )
         return r
 
-    def get_download_links(self, dataset: str, entity_ids: list[str], label: str = "usgsxplore"):
+    def get_download_links(
+        self,
+        dataset: str,
+        entity_ids: list[str],
+        product_number: int | None = None,
+        label: str = "usgsxplore",
+    ):
         """
         Get all download URLs for the given dataset and entity IDs.
 
         :param dataset: Dataset name or alias.
         :param entity_ids: List of entity IDs to download.
-        :yield: dict {entityId: str, url: str}.
+        :param product_number: Index of the product to select if multiple are found.
+            If None and multiple products are found, an exception is raised.
+        :yield: dict {entityId: str, url: str, filesize: int}.
+
+        Raises:
+            DownloadOptionsError: If no available products are found, multiple options require a choice,
+                                or the given product_number is invalid.
         """
         download_options = self.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
-        download_options = process_download_options(download_options)
+        download_options = process_download_options(download_options, product_number)
 
         download_list = [{"entityId": opt["entityId"], "productId": opt["id"]} for opt in download_options]
+        filesizes = {opt["entityId"]: opt["filesize"] for opt in download_options}
         download_request = self.request("download-request", {"downloads": download_list, "label": label})
 
         download_ids = []
         # first download all scenes in availableDownloads from the download-request
         for download in download_request["availableDownloads"]:
             download_ids.append(download["downloadId"])
-            yield {"entityId": download["entityId"], "url": download["url"]}
+            yield {
+                "entityId": download["entityId"],
+                "url": download["url"],
+                "filesize": filesizes[download["entityId"]],
+            }
 
         # then loop with download-retrieve request every 30 sec to get
         # all download link
@@ -369,7 +383,11 @@ class API:
             for download in retrieve_results["available"]:
                 if download["downloadId"] not in download_ids:
                     download_ids.append(download["downloadId"])
-                    yield {"entityId": download["entityId"], "url": download["url"]}
+                    yield {
+                        "entityId": download["entityId"],
+                        "url": download["url"],
+                        "filesize": filesizes[download["entityId"]],
+                    }
 
             # if all the link are not ready yet, sleep 30 sec and loop, else exit from the loop
             if len(download_ids) < (len(download_list) - len(download_request["failed"])):
@@ -381,6 +399,7 @@ class API:
         self,
         dataset: str,
         entity_ids: list[str],
+        product_number: int | None = None,
         output_dir: str = ".",
         overwrite: bool = False,
         max_workers: int = 5,
@@ -394,6 +413,7 @@ class API:
         Args:
             dataset (str): Alias dataset of scenes wanted
             entity_ids (list[str]): list of entity id of scenes wanted
+            product_number (int, optional): The product that will be download. Defaults to None.
             output_dir (str, optional): output directory to store GTiff images. Defaults to ".".
             overwrite (bool, optional): overwrite existing images. Defaults to False.
             max_workers (int, optional): maximum number of thread. Defaults to 5.
@@ -405,7 +425,7 @@ class API:
         if not extract and optimize:
             raise err.APIInvalidParameters("Can't optimized if extract is False")
 
-        # Filter out already existing files unless overwrite is True
+        # STEP 1 : VERIFYING OVERWRITE
         initial_count = len(entity_ids)
         if not overwrite and os.path.exists(output_dir):
             entity_ids = [eid for eid in entity_ids if not any(f.startswith(eid) for f in os.listdir(output_dir))]
@@ -418,22 +438,32 @@ class API:
                 print("[INFO] All requested images are already downloaded.")
             return
 
-        label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-
+        # STEP 2 : FETCHING URLS
         if verbose:
             print(f"[INFO] Fetching download links for {len(entity_ids)} scenes...")
+        label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        if show_progress:
+            iter = tqdm(
+                self.get_download_links(dataset, entity_ids, product_number, label),
+                desc="Fetching links",
+                total=len(entity_ids),
+            )
+        else:
+            iter = self.get_download_links(dataset, entity_ids, product_number, label)
+        urls = list(iter)
 
-        urls = list(self.get_download_links(dataset, entity_ids, label))
-
+        # STEP 3 : DOWNLOADING SCENES
         if verbose:
             print(f"[INFO] Downloading {len(urls)} files to {output_dir}")
+        download_scenes(urls, output_dir, max_workers, show_progress)
 
-        download_files(urls, output_dir, max_workers, overwrite, show_progress)
+        # STEP 4 : EXTRACTING SCENES
         if extract:
             if verbose:
                 print(f"[INFO] Extracting files in {output_dir}")
             extract_files_in_place(output_dir, show_progress, max_workers=max_workers)
 
+        # STEP 5 : OPTIMIZE SCENES
         if optimize:
             if verbose:
                 print(f"[INFO] Optimizing GeoTIFFs in {output_dir}")
@@ -442,86 +472,12 @@ class API:
         if verbose:
             print("[INFO] Download process completed.")
 
-    def download_old(
+    def download_calibration_report(
         self,
         dataset: str,
-        entity_ids: list[str],
+        entity_id: str,
         output_dir: str = ".",
-        max_thread: int = 5,
-        overwrite: bool = False,
-        pbar_type: int = 2,
-        dry_run: bool = False,
-    ) -> list[str]:
-        """
-        Download GTiff images identify from their entity id, use the M2M API. Progress of
-        the downloading can be displayed in terms of the p_bar_type given.
-
-        :param dataset: Alias dataset of scenes wanted
-        :param entity_ids: list of entity id of scenes wanted
-        :param output_dir: output directory to store GTiff images
-        :param max_thread: maximum number of thread that would be used for the downloading
-        :param p_bar_type: way to display progress bar (0: no pbar, 1: one pbar, 2: pbar for each scenes)
-        :param dry_run: If True, skips actual download and only returns download URLs.
-        :return: List of download URLs .
-        """
-        os.makedirs(output_dir, exist_ok=True)
-
-        scenes_downloader = ScenesDownloader(entity_ids, output_dir, max_thread, pbar_type, overwrite)
-
-        # get download-options and send it to the scenes_downloader
-        download_options = self.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
-
-        scenes_downloader.set_download_options(process_download_options(download_options))
-
-        # send a download-request with parsed products
-        download_list = scenes_downloader.get_downloads()
-        request_results = self.request("download-request", {"downloads": download_list, "label": self.label})
-
-        # defined the ctrl-c signal to stop all downloading thread
-        # pylint: disable=unused-argument
-        def _handle_sigint(sign, frame):
-            scenes_downloader.stop_download()
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, _handle_sigint)
-
-        download_ids = []
-        download_urls = []
-        # first download all scenes in availableDownloads from the download-request
-        for download in request_results["availableDownloads"]:
-            download_ids.append(download["downloadId"])
-            download_urls.append(download["url"])
-            if not dry_run:
-                scenes_downloader.download(download["entityId"], download["url"])
-
-        # then loop with download-retrieve request every 30 sec to get
-        # all download link
-        while True:
-            retrieve_results = self.request("download-retrieve", {"label": self.label})
-            # loop in all link "available" and "requested" and download it
-            # with the Product.download method
-            for download in retrieve_results["available"] + retrieve_results["requested"]:
-                if download["downloadId"] not in download_ids:
-                    download_ids.append(download["downloadId"])
-                    download_urls.append(download["url"])
-                    if not dry_run:
-                        scenes_downloader.download(download["entityId"], download["url"])
-
-            # if all the link are not ready yet, sleep 30 sec and loop, else exit from the loop
-            if len(download_ids) < (len(download_list) - len(request_results["failed"])):
-                time.sleep(30)
-            else:
-                break
-
-        # cleanup the download order and wait all thread to finish
-        if not dry_run:
-            self.clean_download()
-            scenes_downloader.wait_all_thread()
-
-        return download_urls
-
-    def download_calibration_report(
-        self, dataset: str, entity_id: str, output_dir: str = ".", calibration_report_product_id="D555"
+        calibration_report_product_id="D555",
     ) -> None:
         """
         Downloads the calibration report for a given dataset and entityId, and saves it to the specified directory.

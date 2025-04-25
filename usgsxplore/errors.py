@@ -88,3 +88,7 @@ class ScenesNotFound(Exception):
 
 class CalibrationReportNotFound(Exception):
     """Error raise when no calibration report are founds"""
+
+
+class DownloadOptionsError(Exception):
+    """Custom exception for errors during download options processing."""
