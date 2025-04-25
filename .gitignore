@@ -170,3 +170,6 @@ examples/*
 
 # ignore vscode things
 .vscode
+
+# ingore ruff cache
+.ruff_cache/
