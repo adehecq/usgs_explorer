@@ -49,8 +49,12 @@ def test_get_entity_id(api: API):
 
 def test_scene_search(api: API):
     "Test the scene search method"
-    scene_filter = filt.SceneFilter.from_args(date_interval=("1900-01-01", "2024-08-01"))
-    result = api.scene_search("landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type="summary")
+    scene_filter = filt.SceneFilter.from_args(
+        date_interval=("1900-01-01", "2024-08-01")
+    )
+    result = api.scene_search(
+        "landsat_tm_c2_l1", scene_filter, max_results=1, metadata_type="summary"
+    )
 
     assert result["recordsReturned"] == 1
     assert 2900000 <= result["totalHits"] <= 3000000  # the totalHits can changed
@@ -93,7 +97,9 @@ def test_get_download_links_aero(api: API):
     label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # product number = 0 for medium resolution
-    urls = list(api.get_download_links(dataset, entity_ids, product_number=0, label=label))
+    urls = list(
+        api.get_download_links(dataset, entity_ids, product_number=0, label=label)
+    )
 
     assert len(urls) == 2
     assert isinstance(urls[0]["url"], str)
@@ -122,7 +128,6 @@ def test_download(api: API):
         patch("os.path.exists", return_value=False),
         patch("usgsxplore.api.download_scenes") as mock_download_scenes,
         patch("usgsxplore.api.extract_files_in_place") as mock_extract_files,
-        patch("usgsxplore.api.optimize_geotifs") as mock_optimize,
     ):
         # Fixer datetime pour rendre le test déterministe (optionnel)
         mock_datetime.now.return_value.strftime.return_value = "20250425_123456"
@@ -140,9 +145,10 @@ def test_download(api: API):
 
         # Vérifications
         api.get_download_links.assert_called_once()
-        mock_download_scenes.assert_called_once_with(["http://mock_url/file1.tif"], "mock_output", 5, True)
+        mock_download_scenes.assert_called_once_with(
+            ["http://mock_url/file1.tif"], "mock_output", 5, True
+        )
         mock_extract_files.assert_called_once_with("mock_output", True, max_workers=5)
-        mock_optimize.assert_called_once_with("mock_output", max_workers=5, show_progress=True)
 
 
 def test_download_calibration_report(api: API):

@@ -27,7 +27,9 @@ from usgsxplore.filter import SceneFilter
 # ----------------------------------------------------------------------------------------------------
 # 									CALLBACK FUNCTIONS
 # ----------------------------------------------------------------------------------------------------
-def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: tuple[str]) -> str:
+def is_valid_output_format(
+    ctx: click.Context, param: click.Parameter, value: tuple[str]
+) -> str:
     """
     Callback use to check the format of the output file of the search command.
     """
@@ -40,7 +42,9 @@ def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: tu
     return value
 
 
-def read_dataset_textfile(ctx: click.Context, param: click.Parameter, value: str | None):
+def read_dataset_textfile(
+    ctx: click.Context, param: click.Parameter, value: str | None
+):
     """
     This callback is use to fill the dataset parameter with either the first line of a textfile
     or with the dataset value in parameters
@@ -148,8 +152,12 @@ def cli() -> None:
     nargs=2,
     help="Date interval (start, end), (YYYY-MM-DD, YYYY-MM-DD).",
 )
-@click.option("-f", "--filter", type=click.STRING, help="String representation of metadata filter")
-@click.option("-m", "--limit", type=click.INT, help="Max. results returned. Return all by default")
+@click.option(
+    "-f", "--filter", type=click.STRING, help="String representation of metadata filter"
+)
+@click.option(
+    "-m", "--limit", type=click.INT, help="Max. results returned. Return all by default"
+)
 @click.option("--pbar", is_flag=True, default=False, help="Display a progress bar")
 def search(
     username: str,
@@ -180,16 +188,22 @@ def search(
 
     try:
         if not output:
-            for batch_scenes in api.batch_search(dataset, scene_filter, limit, "summary", pbar):
+            for batch_scenes in api.batch_search(
+                dataset, scene_filter, limit, "summary", pbar
+            ):
                 for scene in batch_scenes:
                     click.echo(scene["entityId"])
 
         else:
             # we adapt the metadata type only if their are one textfile
-            metadata_type = "summary" if len(output) == 1 and output[0].endswith(".txt") else "full"
+            metadata_type = (
+                "summary" if len(output) == 1 and output[0].endswith(".txt") else "full"
+            )
             scenes = []
 
-            for batch_scenes in api.batch_search(dataset, scene_filter, limit, metadata_type, pbar):
+            for batch_scenes in api.batch_search(
+                dataset, scene_filter, limit, metadata_type, pbar
+            ):
                 scenes += batch_scenes
 
             for file in output:
@@ -247,7 +261,9 @@ def search(
     required=True,
     envvar="USGS_TOKEN",
 )
-@click.argument("textfile", type=click.Path(exists=True, file_okay=True), callback=is_text_file)
+@click.argument(
+    "textfile", type=click.Path(exists=True, file_okay=True), callback=is_text_file
+)
 @click.option(
     "--dataset",
     "-d",
@@ -278,14 +294,12 @@ def search(
     default=5,
     help="Max thread number (default: 5)",
 )
-@click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files")
-@click.option("--hide-pbar", is_flag=True, default=False, help="Hide the progress bar")
-@click.option("--no-extract", is_flag=True, default=False, help="Skip the extraction of files")
 @click.option(
-    "--no-optimized",
-    is_flag=True,
-    default=False,
-    help="Skip the optimization of tif images",
+    "--overwrite", is_flag=True, default=False, help="Overwrite existing files"
+)
+@click.option("--hide-pbar", is_flag=True, default=False, help="Hide the progress bar")
+@click.option(
+    "--no-extract", is_flag=True, default=False, help="Skip the extraction of files"
 )
 def download(
     username: str,
@@ -298,7 +312,6 @@ def download(
     overwrite: bool,
     hide_pbar: bool,
     no_extract: bool,
-    no_optimized: bool,
 ) -> None:
     """
     Download scenes with their entity ids provided in the textfile.
@@ -316,7 +329,6 @@ def download(
             max_workers,
             show_progress=not hide_pbar,
             extract=not no_extract,
-            optimize=not no_optimized,
         )
     except DownloadOptionsError as e:
         click.echo(
@@ -326,7 +338,9 @@ def download(
 
 
 @click.command("download-browse")
-@click.argument("vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file)
+@click.argument(
+    "vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file
+)
 @click.option(
     "--output-dir",
     "-o",
@@ -389,7 +403,11 @@ def dataset(username: str, token: str, all: bool) -> None:
     if all:
         click.echo(api.dataset_names())
     else:
-        dataset_list = [dataset for dataset in api.dataset_names() if not dataset.startswith("event")]
+        dataset_list = [
+            dataset
+            for dataset in api.dataset_names()
+            if not dataset.startswith("event")
+        ]
         click.echo(dataset_list)
     api.logout()
 
