@@ -45,14 +45,28 @@ def test_search_output():
         htmlfile = os.path.join(tmpdir, "tmp.html")
 
         # execute all command
-        result1 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", textfile])
-        result2 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", jsonfile])
-        result3 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", gpkgfile])
+        result1 = CliRunner().invoke(
+            cli, ["search", "declassii", "--limit", "4", "--output", textfile]
+        )
+        result2 = CliRunner().invoke(
+            cli, ["search", "declassii", "--limit", "4", "--output", jsonfile]
+        )
+        result3 = CliRunner().invoke(
+            cli, ["search", "declassii", "--limit", "4", "--output", gpkgfile]
+        )
         with pytest.warns(UserWarning):
-            result4 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", shapefile])
-        result5 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", geojsonfile])
-        result6 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", htmlfile])
-        result7 = CliRunner().invoke(cli, ["search", "declassii", "--limit", "4", "--output", "tmp.png"])
+            result4 = CliRunner().invoke(
+                cli, ["search", "declassii", "--limit", "4", "--output", shapefile]
+            )
+        result5 = CliRunner().invoke(
+            cli, ["search", "declassii", "--limit", "4", "--output", geojsonfile]
+        )
+        result6 = CliRunner().invoke(
+            cli, ["search", "declassii", "--limit", "4", "--output", htmlfile]
+        )
+        result7 = CliRunner().invoke(
+            cli, ["search", "declassii", "--limit", "4", "--output", "tmp.png"]
+        )
 
         # assertions
         assert result1.exit_code == 0
@@ -79,7 +93,9 @@ def test_download():
             file.write("#dataset=aerial_combin\nARBCSRD00010006\nARBCSRD00010007")
 
         runner = CliRunner()
-        result = runner.invoke(cli, ["download", ids_file, "--output-dir", tmpdir, "--hide-pbar", "-p", 0])
+        result = runner.invoke(
+            cli, ["download", ids_file, "--output-dir", tmpdir, "--hide-pbar", "-p", 0]
+        )
 
         assert result.exit_code == 0
         assert "ARBCSRD00010006.tif" in os.listdir(tmpdir)
@@ -93,7 +109,7 @@ def test_info():
     # Test the dataset subcommand
     result = runner.invoke(cli, ["info", "dataset"])
     assert result.exit_code == 0
-    assert 2000 <= len(result.output) <= 2500  # Possibly to be updated in the future
+    assert 2000 <= len(result.output)  # Possibly to be updated in the future
 
     # Test the filters subcommand
     result = runner.invoke(cli, ["info", "filters", "declassii"])

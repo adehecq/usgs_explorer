@@ -377,7 +377,6 @@ class API:
         )
 
         download_ids = []
-        print(download_request)
         # first download all scenes in availableDownloads from the download-request
         for download in download_request["availableDownloads"]:
             download_ids.append(download["downloadId"])
@@ -391,7 +390,6 @@ class API:
         # all download link
         while True:
             retrieve_results = self.request("download-retrieve", {"label": label})
-            print(retrieve_results)
             # loop in all link "available" and "requested" and download it
             # with the Product.download method
             for download in retrieve_results["available"]:
@@ -550,6 +548,23 @@ class API:
                 for chunk in response.iter_content(chunk_size=8192):
                     if chunk:  # Skip keep-alive chunks
                         f.write(chunk)
+
+    def get_scenes_metadata(self, dataset: str, entity_ids: list[str]) -> list[dict]:
+        list_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        payload = {
+            "listId": list_id,
+            "datasetName": dataset,
+            "entityIds": entity_ids,
+            "timeToLive": "PT1M",
+        }
+        self.request("scene-list-add", payload)
+
+        payload = {
+            "listId": list_id,
+            "datasetName": dataset,
+            "metadataType": "full",
+        }
+        return self.request("scene-metadata-list", payload)
 
     def clean_download(self) -> None:
         """

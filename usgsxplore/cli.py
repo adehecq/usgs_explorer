@@ -223,7 +223,7 @@ def search(
                         json.dump(scenes, f, indent=4)
 
                 elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                    gdf = utils.to_gdf(scenes)
+                    gdf = utils.convert_response_to_gdf(scenes)
                     if file.endswith(".html"):
                         utils.save_in_html(gdf, file)
                     else:
@@ -318,7 +318,7 @@ def download(
     The dataset can also be provide in the first line of the textfile : #dataset=declassii
     """
     api = API(username, token)
-    entity_ids = utils.read_textfile(textfile)
+    _, entity_ids = utils.read_textfile(textfile)
     try:
         api.download(
             dataset,

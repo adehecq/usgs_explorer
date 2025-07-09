@@ -137,7 +137,7 @@ usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
 usgsxplore download --help
 ```
 
-```
+```text
 Usage: usgsxplore download [OPTIONS] TEXTFILE
 
   Download scenes with their entity ids provided in the textfile. The dataset
@@ -165,7 +165,7 @@ It also extract file in place.
 usgsxplore download-browse --help
 ```
 
-```
+```text
 Usage: usgsxplore download-browse [OPTIONS] VECTOR_FILE
 
   Download browse images of a vector data file localy.
@@ -184,7 +184,7 @@ Information on available datasets and filters can be printed on screen with the 
 usgsxplore info --help
 ```
 
-```
+```text
 Usage: usgsxplore info [OPTIONS] COMMAND [ARGS]...
 
   Display information on available datasets and filters.
@@ -205,7 +205,19 @@ usgsxplore search declassii -f "whatever=?"
 
 will print all metadata filters that can be used for the "declassii" dataset.
 
-<img width="439" alt="image" src="https://github.com/user-attachments/assets/e3fc1fdc-9ee2-4ddb-a9a4-863c5884a1d3">
+```text
+FilterFieldError  :  Invalid field 'whatever', choose one in :
+           field_id         field_label           sql_field
+0  5e839ff88d166638           Entity ID           ENTITY_ID
+1  5e839ff8cb91570a      Mission Number         MISSION_NBR
+2  5e839ff86e60acbb   Operations Number          REVOLUTION
+3  5e839ff8388465fa   Camera Resolution        camera_resol
+4  5e839ff8cfa94807         Camera Type              camera
+5  5e839ff87427aed4               Frame           FRAME_NBR
+6   5e839ff87129a39           Film Size           FILM_TYPE
+7  5e839ff8e45ca028          Image Type          IMAGE_TYPE
+8  5e839ff8ba6eead0  Download Available  DOWNLOAD_AVAILABLE
+```
 
 ```bash
 usgsxplore search declassii -f "camera=?"
@@ -213,4 +225,10 @@ usgsxplore search declassii -f "camera=?"
 
 will print all possible values for the filter "camera".
 
-<img width="391" alt="image" src="https://github.com/user-attachments/assets/bcdedad7-39b0-44de-bf8c-fc7e4ca5f1ee">
+```text
+FilterValueError  :  Invalid value '?', choose one in :
+  values                              value_labels
+0                                              All
+1      H  KH-7 High Resolution Surveillance Camera
+2      L      KH-9 Lower Resolution Mapping Camera
+```

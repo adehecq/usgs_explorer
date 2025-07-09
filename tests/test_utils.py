@@ -21,6 +21,7 @@ import pytest
 import usgsxplore.errors as err
 from usgsxplore.api import API
 from usgsxplore.utils import (
+    convert_response_to_gdf,
     download_browse_img,
     download_scenes,
     extract_files_in_place,
@@ -28,7 +29,6 @@ from usgsxplore.utils import (
     read_textfile,
     save_in_gfile,
     sort_strings_by_similarity,
-    to_gdf,
     update_gdf_browse,
 )
 
@@ -43,14 +43,14 @@ def scenes_metadata(api: API) -> list[dict]:
 
 def test_to_gdf(scenes_metadata: list[dict]) -> None:
     "Test the to_gdf function"
-    gdf = to_gdf(scenes_metadata)
+    gdf = convert_response_to_gdf(scenes_metadata)
     assert gdf.shape[0] == 10
     assert gdf.shape[1] == 35
 
 
 def test_save_in_gfile(scenes_metadata: list[dict]):
     "Test the save_in_gfile functions"
-    gdf = to_gdf(scenes_metadata)
+    gdf = convert_response_to_gdf(scenes_metadata)
 
     with TemporaryDirectory() as tmpdir:
         gpkg_file = os.path.join(tmpdir, "tmp.gpkg")
@@ -99,7 +99,8 @@ def test_read_textfile() -> None:
             file.write("# id2 id3\n")
             file.write("id4\n")
 
-        list_id = read_textfile(textfile)
+        dataset, list_id = read_textfile(textfile)
+        assert dataset == "declassii"
         assert "id1" in list_id
         assert "id2" not in list_id and "id3" not in list_id
         assert "id4" in list_id
@@ -108,7 +109,7 @@ def test_read_textfile() -> None:
 
 def test_download_browse_img(scenes_metadata: list[dict]) -> None:
     "Test the download_browse_img function"
-    gdf = to_gdf(scenes_metadata)
+    gdf = convert_response_to_gdf(scenes_metadata)
     url_list = gdf["browse_url"].tolist()
 
     with TemporaryDirectory() as tmpdir:
@@ -119,7 +120,7 @@ def test_download_browse_img(scenes_metadata: list[dict]) -> None:
 
 def test_update_gdf_browse(scenes_metadata: list[dict]) -> None:
     "Test the update_gdf_browse function"
-    gdf = to_gdf(scenes_metadata)
+    gdf = convert_response_to_gdf(scenes_metadata)
 
     gdf = update_gdf_browse(gdf, "images")
 
@@ -155,7 +156,9 @@ class TestDownloadScenes:
                     # Simulate a response for 'requests.get'
                     mock_response = MagicMock()
                     mock_response.raise_for_status = MagicMock()
-                    mock_response.headers = {"Content-Disposition": 'attachment; filename="test_file.tif"'}
+                    mock_response.headers = {
+                        "Content-Disposition": 'attachment; filename="test_file.tif"'
+                    }
                     mock_response.iter_content = MagicMock(return_value=[b"test data"])
                     mock_requests_get.return_value = mock_response
 
@@ -167,7 +170,9 @@ class TestDownloadScenes:
 
                     # Check if requests.get was called for each scene's URL
                     for scene in scenes:
-                        mock_requests_get.assert_any_call(scene["url"], stream=True, timeout=30)
+                        mock_requests_get.assert_any_call(
+                            scene["url"], stream=True, timeout=30
+                        )
 
                     # Verify that the progress bar was not updated since show_progress is False
                     mock_tqdm.assert_not_called()
@@ -187,10 +192,14 @@ class TestDownloadScenes:
                 show_progress = False
 
                 # Run the function
-                download_scenes(scenes, output_dir, max_threads=2, show_progress=show_progress)
+                download_scenes(
+                    scenes, output_dir, max_threads=2, show_progress=show_progress
+                )
 
                 # Verify that requests.get was called to download the file again
-                mock_requests_get.assert_any_call("http://example.com/scene1", stream=True, timeout=30)
+                mock_requests_get.assert_any_call(
+                    "http://example.com/scene1", stream=True, timeout=30
+                )
 
     def test_interrupt_download(self):
         # Simulate a SIGINT signal interrupt during the download (e.g., Ctrl+C)
@@ -209,7 +218,9 @@ class TestDownloadScenes:
                 # Simulate the response object for 'requests.get' mock
                 mock_response = MagicMock()
                 mock_response.raise_for_status = MagicMock()
-                mock_response.headers = {"Content-Disposition": 'attachment; filename="test_file.tif"'}
+                mock_response.headers = {
+                    "Content-Disposition": 'attachment; filename="test_file.tif"'
+                }
                 mock_response.iter_content = MagicMock(return_value=[b"test data"])
                 mock_requests_get.return_value = mock_response
 
@@ -219,7 +230,9 @@ class TestDownloadScenes:
                 # Patch the signal handler inside the function
                 with mock.patch("signal.signal", side_effect=signal_handler):
                     # Run the download_scenes in a separate thread to simulate download and interruption
-                    download_scenes(scenes, output_dir, max_threads=2, show_progress=show_progress)
+                    download_scenes(
+                        scenes, output_dir, max_threads=2, show_progress=show_progress
+                    )
 
                     # Raise the SIGINT signal to simulate an interruption (like Ctrl+C)
                     signal.raise_signal(signal.SIGINT)
@@ -347,7 +360,9 @@ class TestExtractFilesInPlace:
             assert f.read() == b"hello world"
 
     def test_extract_tar_gz_file(self, temp_dir):
-        self.create_tar_gz_file(temp_dir, "archive.tar.gz", {"file1.txt": b"data1", "file2.txt": b"data2"})
+        self.create_tar_gz_file(
+            temp_dir, "archive.tar.gz", {"file1.txt": b"data1", "file2.txt": b"data2"}
+        )
         extract_files_in_place(temp_dir, show_progress=False)
         assert os.path.exists(os.path.join(temp_dir, "file1.txt"))
         assert os.path.exists(os.path.join(temp_dir, "file2.txt"))

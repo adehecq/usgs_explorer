@@ -28,7 +28,7 @@ from tqdm import tqdm
 from usgsxplore.errors import DownloadOptionsError
 
 
-def to_gdf(scenes_metadata: list[dict]) -> None:
+def convert_response_to_gdf(scenes_metadata: list[dict]) -> None:
     """
     This method convert the file scenes.jsonl into a geodataframe with the spatialCoverage for the geometry
 
@@ -122,7 +122,7 @@ def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
     m.save(html_file)
 
 
-def read_textfile(textfile: str) -> list[str]:
+def read_textfile(textfile: str) -> tuple[str | None, list[str]]:
     """
     This function read a textfile and return a list of ids found in the textfile,
     without comment line
@@ -130,14 +130,21 @@ def read_textfile(textfile: str) -> list[str]:
     :param textfile: path of the textfile
     """
     list_ids = []
+    dataset = None
 
     with open(textfile, encoding="utf-8") as file:
+        first_line = file.readline().strip()
+        if first_line.startswith("#"):
+            spl = first_line.split("=", maxsplit=1)
+            if len(spl) == 2 and "dataset" in spl[0]:
+                dataset = spl[1].strip()
+
         # loop in other line and don't take the comment
         for line in file:
             if not line.strip().startswith("#"):
                 spl = line.split("#", maxsplit=1)
                 list_ids.append(spl[0].strip())
-    return list_ids
+    return (dataset, list_ids)
 
 
 def sort_strings_by_similarity(ref_str: str, list_str: list[str]) -> list[str]:
