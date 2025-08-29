@@ -66,7 +66,9 @@ Commands:
 
 ### Credentials
 
-Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/). Note that you need to specify specifically all datasets you plan to access through the API.
+Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/). 
+
+Note that **you need to specifically request access to the USGS M2M API at [this link](https://ers.cr.usgs.gov/profile/access)**, as stated in the [M2M documentation](https://m2m.cr.usgs.gov/api/docs/json/), even if you already have an account, and specify all datasets you plan to access through the API.
 
 `--username` and `--token` can be provided as command-line options or as environment variables:
 
