@@ -28,7 +28,7 @@ from tqdm import tqdm
 from usgsxplore.errors import DownloadOptionsError
 
 
-def convert_response_to_gdf(scenes_metadata: list[dict]) -> None:
+def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
     """
     This method convert the file scenes.jsonl into a geodataframe with the spatialCoverage for the geometry
 
