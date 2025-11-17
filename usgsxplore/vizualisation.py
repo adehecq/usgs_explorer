@@ -1,45 +1,53 @@
 import geopandas as gpd
+from matplotlib import pyplot as plt
 import numpy as np
 from shapely.geometry import box
-from matplotlib.figure import Figure
-import matplotlib
 import pandas as pd
 
 
 import pandas as pd
 import numpy as np
 import geopandas as gpd
-from matplotlib.figure import Figure
 
-def generate_scenes_analysis(
+def compute_grid_metadata(
     gdf: gpd.GeoDataFrame,
     step: float = 1.0,
     date_column: str = "Acquisition Date"
-) -> dict[str, Figure]:
+) -> gpd.GeoDataFrame:
     """
-    Generate a set of spatial analysis figures from a GeoDataFrame of scene footprints.
+    Compute acquisition-related metrics on a regular spatial grid.
 
-    This function computes several metrics on a regular grid covering the input geometries:
-      - Number of images intersecting each grid cell
-      - Number of unique acquisition dates per grid cell
-      - Observation time span in years per cell
-      - Peak acquisition year per cell
+    This function:
+      - Filters polygon geometries
+      - Converts the date column to datetime
+      - Builds a regular grid covering the input geometries
+      - Associates each grid cell with intersecting scenes
+      - Aggregates acquisition dates per cell
+      - Computes several metrics:
+            * Number of intersecting images
+            * Number of unique acquisition dates
+            * Observation time span (years)
+            * Peak acquisition year
 
     Parameters
     ----------
     gdf : geopandas.GeoDataFrame
-        Input GeoDataFrame containing polygon or multipolygon geometries and a date column.
+        Input GeoDataFrame containing scene footprints and a date column.
     step : float, optional
-        Grid cell size in CRS units (default is 1.0).
+        Cell size of the regular grid in CRS units (default is 1.0).
     date_column : str, optional
-        Column name containing acquisition dates (default is "Acquisition Date").
+        Name of the acquisition date column (default is "Acquisition Date").
 
     Returns
     -------
-    dict[str, matplotlib.figure.Figure]
-        Dictionary of Matplotlib figures, keyed by metric name.
-    """
+    geopandas.GeoDataFrame
+        A GeoDataFrame representing the grid, enriched with acquisition metrics.
 
+    Raises
+    ------
+    ValueError
+        If the specified date column is not present in the input GeoDataFrame.
+    """
     # 1. Check that the date column exists
     if date_column not in gdf.columns:
         raise ValueError(f"The GeoDataFrame must contain the date column: {date_column}")
@@ -79,6 +87,34 @@ def generate_scenes_analysis(
     grid_gdf["time_span_years"] = dates_by_cell.apply(time_span_years).reindex(grid_gdf.index).fillna(0)
     grid_gdf["peak_year"] = dates_by_cell.apply(peak_year).reindex(grid_gdf.index).fillna(0)
 
+    return grid_gdf
+
+
+def generate_plots_from_grid(grid_gdf: gpd.GeoDataFrame) -> dict[str, plt.Figure]:
+    """
+    Generate a set of spatial analysis figures from a grid GeoDataFrame.
+
+    This function produces one figure per acquisition metric:
+        - Number of images per grid cell
+        - Number of unique acquisition dates per grid cell
+        - Observation time span in years
+        - Peak acquisition year
+
+    Each figure displays:
+        - A world map background
+        - The grid colored by the metric values
+        - A colorbar and axis labels
+
+    Parameters
+    ----------
+    grid_gdf : geopandas.GeoDataFrame
+        GeoDataFrame representing the analysis grid, already enriched with metric columns.
+
+    Returns
+    -------
+    dict[str, matplotlib.figure.Figure]
+        Dictionary mapping metric names to their Matplotlib figures.
+    """
     # 8. Generate plots for each metric
     figures = {
         "Number of Images": _plot_box_grid_on_world_map(
@@ -160,7 +196,7 @@ def _plot_box_grid_on_world_map(
     vmin: float | None = None,
     vmax: float | None = None,
     url_world_map: str = "https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson"
-) -> Figure:
+) -> plt.Figure:
     """
     Plot a GeoDataFrame grid on a world map with a colored variable.
 
@@ -194,8 +230,7 @@ def _plot_box_grid_on_world_map(
     """
 
     # Create figure and axis
-    fig = Figure(figsize=(10, 8))
-    ax = fig.subplots()
+    fig, ax = plt.subplots(figsize=(10, 8))
 
     # Load world map GeoDataFrame
     world_map_gdf = gpd.read_file(url_world_map)
