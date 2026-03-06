@@ -7,6 +7,7 @@ Author: Luc Godin
 
 import gzip
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -52,7 +53,8 @@ def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
 
         # add all metadata attribute
         for field in scene.get("metadata"):
-            attributes.setdefault(field.get("fieldName"), []).append(field.get("value"))
+            field_name = _to_snake_case(field.get("fieldName"))
+            attributes.setdefault(field_name, []).append(field.get("value"))
 
         if len(scene["browse"]) > 0:
             attributes.setdefault("browse_url", []).append(
@@ -288,31 +290,6 @@ def format_table(data: list[list]) -> str:
     return table_str
 
 
-def convert_response_to_df(scenes_metadata: list[dict]) -> pd.DataFrame:
-    """
-    Convert scenes metadata into a pandas DataFrame (without geometry).
-
-    :param scenes_metadata: list of scene dictionaries (e.g., from scenes.jsonl)
-    :return: DataFrame with metadata and browse_url
-    """
-    attributes = {}
-
-    for scene in scenes_metadata:
-        # add all metadata attributes
-        for field in scene.get("metadata", []):
-            attributes.setdefault(field.get("fieldName"), []).append(field.get("value"))
-
-        # add browse_url field
-        if len(scene.get("browse", [])) > 0:
-            attributes.setdefault("browse_url", []).append(
-                scene["browse"][0].get("browsePath")
-            )
-        else:
-            attributes.setdefault("browse_url", []).append(None)
-
-    return pd.DataFrame(data=attributes)
-
-
 def process_download_options(
     download_options: list[dict], product_number: int | None = None
 ) -> list[dict] | None:
@@ -514,6 +491,42 @@ def extract_files_in_place(
         else:
             for _ in as_completed(futures):
                 pass
+
+
+def _to_snake_case(string: str) -> str:
+    """
+    Convert a string to snake_case.
+
+    Examples:
+        "Entity ID" -> "entity_id"
+        "MyVariableName" -> "my_variable_name"
+        "  Leading and trailing  " -> "leading_and_trailing"
+
+    Args:
+        string (str): Input string.
+
+    Returns:
+        str: Snake_case version of the string.
+    """
+    # 1. Strip leading/trailing whitespace
+    string = string.strip()
+    
+    # 2. Replace spaces, hyphens, and dots with underscores
+    string = re.sub(r"[\s\-\.]+", "_", string)
+    
+    # 3. Insert underscore before capital letters preceded by lowercase letters (camelCase -> snake_case)
+    string = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", string)
+    
+    # 4. Convert everything to lowercase
+    string = string.lower()
+    
+    # 5. Remove any duplicate underscores
+    string = re.sub(r"__+", "_", string)
+    
+    # 6. Remove leading/trailing underscores
+    string = string.strip("_")
+    
+    return string
 
 
 # End-of-file (EOF)
