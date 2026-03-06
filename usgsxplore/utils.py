@@ -529,4 +529,23 @@ def _to_snake_case(string: str) -> str:
     return string
 
 
+def get_strip_id_from_entity_id(entity_id: str) -> str:
+    """
+    Extract the strip ID from an entity ID string.
+
+    The strip ID is defined as the entity ID **up to and including the last uppercase letter**. 
+    All characters after the last uppercase letter are removed.
+
+    Examples:
+        "ABCX123" -> "ABCX"
+        "DEFY456_extra" -> "DEFY"
+        "GHIJ" -> "GHIJ"
+    """
+    match = re.search(r"[A-Z](?!.*[A-Z])", entity_id)
+    if not match:
+        raise ValueError(f"Invalid entity_id '{entity_id}': contains no uppercase letter.")
+    
+    # Retourne tout jusqu'à la position de cette majuscule (incluse)
+    return entity_id[: match.end()]
+
 # End-of-file (EOF)

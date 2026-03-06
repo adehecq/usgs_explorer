@@ -12,6 +12,8 @@ import rasterio
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+from usgsxplore.utils import get_strip_id_from_entity_id
+
 
 __all__ = ["generate_strips_from_browse", "download_browse_img", "mosaic_from_gdf"]
 
@@ -20,10 +22,9 @@ __all__ = ["generate_strips_from_browse", "download_browse_img", "mosaic_from_gd
 #############################################################################################
 
 
-def generate_strips_from_browse(
-    gdf: gpd.GeoDataFrame,
-    output_dir: str | Path = "",
-    strip_id_key: str = "strip_id",
+def generate_mosaic_strips_from_browse(
+    vector_file: str| Path,
+    output_dir: str | Path,
     url_key: str = "browse_url",
     resolution: int = 100,
     resampling: Resampling = Resampling.nearest,
@@ -66,10 +67,16 @@ def generate_strips_from_browse(
     None
     """
     output_dir = Path(output_dir)
+
+    # read the vector file
+    gdf = gpd.read_file(vector_file)
+    gdf["strip_id"] = gdf["entity_id"].apply(get_strip_id_from_entity_id)
+    gdf.sort_values(["acquisition_date", "strip_id"], inplace=True)
+
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = []
         # 1. add all tasks to the executor
-        for strip_id, group in gdf.groupby(strip_id_key):
+        for strip_id, group in gdf.groupby("strip_id"):
             output_path = output_dir / f"{strip_id}.tif"
 
             # skip existing files if not overwrite
@@ -104,7 +111,6 @@ def generate_strips_from_browse(
                     fut.result()
                 except Exception as e:
                     print(f"Error in a strip: {e}")
-
 
 
 def download_browse_img(url: str, grayscale: bool = True) -> np.ndarray:
