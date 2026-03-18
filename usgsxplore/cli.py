@@ -14,6 +14,7 @@ import click
 import geopandas as gpd
 
 import usgsxplore.utils as utils
+import usgsxplore.browse as browse
 from usgsxplore.api import API
 from usgsxplore.errors import (
     DownloadOptionsError,
@@ -371,6 +372,58 @@ def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
     utils.save_in_gfile(gdf, vector_file)
 
 
+@click.command("download-browse-strip")
+@click.argument(
+    "vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file
+)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(dir_okay=True, resolve_path=True),
+    default=".",
+    help="Output directory",
+)
+@click.option(
+    "--resolution",
+    "-r",
+    type=click.INT,
+    default=100,
+    help="Resolution in meters of output mosaic",
+)
+@click.option(
+    "--max-workers",
+    "-m",
+    type=click.INT,
+    default=5,
+    help="Max thread number (default: 5)",
+)
+@click.option(
+    "--overwrite", is_flag=True, default=False, help="Overwrite existing files"
+)
+@click.option("--hide-pbar", is_flag=True, default=False, help="Hide the progress bar")
+def download_browse_strip(
+    vector_file: str,
+    output_dir: str,
+    resolution: int,
+    max_workers: int,
+    overwrite: bool,
+    hide_pbar: bool,
+) -> None:
+    """
+    Read scenes from a vector file, group them by strip, and generate one mosaic (GeoTIFF) per strip.
+    Images are downloaded from URLs stored in the "browse_url" field of the vector file.
+    The resulting mosaics are saved in the output directory.
+    """
+    browse.download_browse_strips(
+        vector_file,
+        output_dir,
+        resolution=resolution,
+        max_workers=max_workers,
+        overwrite=overwrite,
+        show_progress=not hide_pbar,
+    )
+
+
 @click.group()
 def info() -> None:
     """
@@ -452,6 +505,7 @@ def filters(username: str, token: str, dataset: str) -> None:
 cli.add_command(search)
 cli.add_command(download)
 cli.add_command(download_browse)
+cli.add_command(download_browse_strip)
 cli.add_command(info)
 info.add_command(dataset)
 info.add_command(filters)

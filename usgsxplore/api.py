@@ -578,6 +578,15 @@ class API:
             for dl in download_search:
                 self.request("download-remove", {"downloadId": dl["downloadId"]})
 
+    # --- context manager methods ---
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        # always called, even if exception occurred
+        self.logout()
+        # return False to propagate exceptions, True to suppress
+        return False
 
 def _random_string(length=10):
     """Generate a random string."""
