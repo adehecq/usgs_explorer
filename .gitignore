@@ -173,3 +173,5 @@ examples/*
 
 # ingore ruff cache
 .ruff_cache/
+
+CLAUDE.md

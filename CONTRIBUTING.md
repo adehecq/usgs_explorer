@@ -13,6 +13,21 @@ poetry install
 poetry run pre-commit install
 ```
 
+## VSCode configuration (optional)
+
+If you use VSCode, you can add the following to your `.vscode/settings.json` to enable format on save with Ruff (requires the [`charliermarsh.ruff`](https://marketplace.visualstudio.com/items?itemName=charliermarsh.ruff) extension):
+
+```json
+{
+    "[python]": {
+        "editor.formatOnSave": true,
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    }
+}
+```
+
+The line length is set to 120 characters via `[tool.ruff]` in `pyproject.toml`.
+
 Before committing make sure to passed all tests:
 ```bash
 poetry run pytest

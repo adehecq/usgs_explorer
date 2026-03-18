@@ -1,236 +1,284 @@
 [![Tests](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml/badge.svg)](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml)
 
-# Description
+# usgsxplore
 
-The **usgsxplore** Python package provides an interface to the [USGS M2M API](https://m2m.cr.usgs.gov/) to search and download data available from the [Earth Explorer](https://earthexplorer.usgs.gov/) platform.
+Python client for the [USGS M2M API](https://m2m.cr.usgs.gov/) — search, download, and process Earth observation imagery from [EarthExplorer](https://earthexplorer.usgs.gov/).
 
-This package is highly inspired by [landsatxplore](https://github.com/yannforget/landsatxplore) but it supports more datasets and adds new functionalities.
+Supports **100+ datasets** (Landsat, Hexagon KH-9, declassified imagery, aerial photos, and more). Provides both a **CLI** and a **Python API**.
 
-# Quick start
+> Inspired by [landsatxplore](https://github.com/yannforget/landsatxplore), with broader dataset support and additional features.
 
-Searching for Landsat scenes over the location (5.7074, 45.1611) acquired between 2010-2020.
+---
 
-```bash
-usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
-```
-
-Search for Hexagon KH-9 scenes. Save the result into a geopackage and a HTML map
-
-```bash
-usgsxplore search declassii --filter "camera=H" --output results.gpkg --output map.html
-```
-
-Downloading the 10 first images from landsat_tm_c2_l1
-
-```bash
-usgsxplore search landsat_tm_c2_l1 --limit 10 --output results.txt
-usgsxplore download results.txt
-```
-
-# Installation
-
-The package can be installed using pip.
+## Installation
 
 ```bash
 pip install usgsxplore
 
-# or with pipx
+# or with pipx (recommended for CLI use)
 pipx install usgsxplore
 ```
 
-# Usage
+---
 
-**usgsxplore** can be used both through its command-line interface and as a python module (example : [download.ipynb](./examples/download.ipynb)).
+## Credentials
 
-## Command-line interface
+You need a USGS ERS account with M2M API access enabled.
+
+1. Register at [ers.cr.usgs.gov/register](https://ers.cr.usgs.gov/register)
+2. Request M2M API access at [ers.cr.usgs.gov/profile/access](https://ers.cr.usgs.gov/profile/access) — specify the datasets you plan to use
+3. Use your **username** and **M2M token** (not your password)
+
+Set credentials as environment variables to avoid typing them every time:
 
 ```bash
-usgsxplore --help
-```
-
-```
-Usage: usgsxplore [OPTIONS] COMMAND [ARGS]...
-
-  Command line interface of the usgsxplore. Documentation :
-  https://github.com/adehecq/usgs_explorer
-
-Options:
-  --help  Show this message and exit.
-
-Commands:
-  download         Download scenes with their entity ids provided in the textfile.
-  download-browse  Download browse images of a vector data file localy.
-  info             Display information on available datasets and filters.
-  search           Search scenes in a dataset with filters.
-```
-
-### Credentials
-
-Credentials for the Earth Explorer portal can be obtained [here](https://ers.cr.usgs.gov/register/). 
-
-Note that **you need to specifically request access to the USGS M2M API at [this link](https://ers.cr.usgs.gov/profile/access)**, as stated in the [M2M documentation](https://m2m.cr.usgs.gov/api/docs/json/), even if you already have an account, and specify all datasets you plan to access through the API.
-
-`--username` and `--token` can be provided as command-line options or as environment variables:
-
-``` shell
 export USGS_USERNAME=<your_username>
 export USGS_TOKEN=<your_token>
 ```
 
-### Searching
+---
+
+## Quick start
 
 ```bash
-usgsxplore search --help
+# Search for Landsat scenes at a location between 2010 and 2020
+usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
+
+# Search for Hexagon KH-9 scenes and export to GeoPackage + HTML map
+usgsxplore search declassii --filter "camera=H" --output results.gpkg --output map.html
+
+# Download the first 10 results
+usgsxplore search landsat_tm_c2_l1 --limit 10 --output results.txt
+usgsxplore download results.txt
 ```
 
+---
+
+## CLI Reference
+
 ```
-Usage: usgsxplore search [OPTIONS] DATASET
+usgsxplore [OPTIONS] COMMAND [ARGS]...
 
-  Search scenes in a dataset with filters.
-
-Options:
-  -u, --username TEXT          EarthExplorer username.  [required]
-  -t, --token TEXT             EarthExplorer token.  [required]
-  -o, --output PATH            Output file : (txt, json, html, gpkg, shp,
-                               geojson)
-  -vf, --vector-file PATH      Vector file that will be used for spatial
-                               filter
-  -l, --location FLOAT...      Point of interest (longitude, latitude).
-  -b, --bbox FLOAT...          Bounding box (xmin, ymin, xmax, ymax).
-  -c, --clouds INTEGER         Max. cloud cover (1-100).
-  -i, --interval-date TEXT...  Date interval (start, end), (YYYY-MM-DD, YYYY-
-                               MM-DD).
-  -f, --filter TEXT            String representation of metadata filter
-  -m, --limit INTEGER          Max. results returned. Return all by default
-  --pbar                       Display a progress bar
-  --help                       Show this message and exit.
+Commands:
+  search                 Search scenes in a dataset
+  download               Download scenes from a text file of entity IDs
+  download-browse        Download browse (preview) images from a vector file
+  download-browse-strip  Generate mosaicked GeoTIFF strips from browse images
+  info                   List available datasets and metadata filters
 ```
 
-If the `--output` is not provided, the command will print the entity ids of scenes found. Else if `--output` is provided it will save the results in the given file. Five formats are currently supported for the output:
+### `search`
 
-- **text file (.txt)** : Each line is an entity id and the first line contain the dataset ex: `#dataset=landsat_tm_c2_l1`. This file can then be used to download the images.
-- **json file (.json)** : json file containing the results of the search.
-- **vector data (.gpkg, .shp, .geojson)** : save the results in a vector file, useful to visualise the geographic location of the results in a GIS.
-- **HTML file (.html)** : save the results in a HTML file to have a quick look of scenes on a map.
-
-The search command works with multiple scene-search so there is no limit of results, but you can fixe one with `--limit`.
-
-If you provide a wrong dataset, a list of 50 datasets with high string similarity will be printed.
-
-The `--filter` works like this "`field1=value1 & field2=value2 | field3=value3`". For the field you can put either the filter id, the filter label, or the sql filter. For the value you can put either value or value label. Exemples:
+Search scenes in a dataset, with optional spatial, temporal, and metadata filters.
 
 ```bash
-# select scenes from the Hexagon KH-9 satellite
-# all of those 4 command will give the same results
+usgsxplore search [OPTIONS] DATASET
+```
+
+| Option | Description |
+|--------|-------------|
+| `-u / --username` | USGS username (or `USGS_USERNAME` env var) |
+| `-t / --token` | USGS M2M token (or `USGS_TOKEN` env var) |
+| `-o / --output` | Output file — repeatable, format inferred from extension |
+| `-vf / --vector-file` | Vector file for spatial filter (`.gpkg`, `.shp`, `.geojson`) |
+| `-l / --location` | Point filter: `longitude latitude` |
+| `-b / --bbox` | Bounding box: `xmin ymin xmax ymax` |
+| `-c / --clouds` | Max cloud cover percentage (1–100) |
+| `-i / --interval-date` | Date range: `YYYY-MM-DD YYYY-MM-DD` |
+| `-f / --filter` | Metadata filter string (see [Filter syntax](#filter-syntax)) |
+| `-m / --limit` | Max number of results (default: all) |
+| `--pbar` | Show progress bar |
+
+**Output formats:**
+
+| Extension | Content |
+|-----------|---------|
+| `.txt` | Entity IDs, one per line — usable with `download` |
+| `.json` | Raw API response with full metadata |
+| `.gpkg` / `.shp` / `.geojson` | Vector file with scene footprints |
+| `.html` | Interactive map for quick visualization |
+
+Multiple outputs can be specified simultaneously:
+
+```bash
+usgsxplore search declassii --filter "camera=H" --output scenes.gpkg --output map.html
+```
+
+### `download`
+
+Download scenes from a `.txt` file of entity IDs (produced by `search`).
+
+```bash
+usgsxplore download [OPTIONS] TEXTFILE
+```
+
+| Option | Description |
+|--------|-------------|
+| `-u / --username` | USGS username |
+| `-t / --token` | USGS M2M token |
+| `-d / --dataset` | Dataset name (auto-read from file header if present) |
+| `-p / --product-number` | Product index when multiple products are available |
+| `-o / --output-dir` | Output directory (default: `.`) |
+| `-m / --max-workers` | Parallel download threads (default: 5) |
+| `--overwrite` | Overwrite existing files |
+| `--hide-pbar` | Hide progress bar |
+| `--no-extract` | Skip extraction of downloaded archives |
+
+The `.txt` file header line `#dataset=<name>` is read automatically, so passing `-d` is optional if the file was generated by `search`.
+
+### `download-browse`
+
+Download browse (preview) images from a vector file and save them locally.
+
+```bash
+usgsxplore download-browse [OPTIONS] VECTOR_FILE
+```
+
+Reads the `browse_url` column from the vector file, downloads images to `--output-dir`, and updates the vector file with local paths.
+
+| Option | Description |
+|--------|-------------|
+| `-o / --output-dir` | Output directory (default: `./browse_images/`) |
+| `--pbar` | Show progress bar |
+
+### `download-browse-strip`
+
+Download browse images and mosaic them into **georeferenced GeoTIFF strips**, grouped by satellite acquisition strip.
+
+```bash
+usgsxplore download-browse-strip [OPTIONS] VECTOR_FILE
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o / --output-dir` | Output directory (default: `.`) |
+| `-r / --resolution` | Output resolution in meters (default: 100) |
+| `-m / --max-workers` | Parallel download threads (default: 5) |
+| `--overwrite` | Overwrite existing files |
+| `--hide-pbar` | Hide progress bar |
+
+This command is useful for getting a quick georeferenced overview of declassified imagery strips (e.g. KH-9 Hexagon).
+
+### `info`
+
+```bash
+# List all available datasets
+usgsxplore info dataset
+
+# List available metadata filters for a dataset
+usgsxplore info filters DATASET
+```
+
+**Tip:** Trigger filter help directly from a search by using an invalid value:
+
+```bash
+# List all filter fields for the declassii dataset
+usgsxplore search declassii -f "whatever=?"
+
+# List all valid values for the "camera" filter
+usgsxplore search declassii -f "camera=?"
+```
+
+---
+
+## Filter syntax
+
+The `--filter` option accepts a human-readable expression:
+
+```
+"field1=value1 & field2=value2 | field3=value3"
+```
+
+Fields can be identified by their **filter ID**, **label**, or **SQL field name**. Values can be the raw value or the display label. All of the following are equivalent:
+
+```bash
 usgsxplore search declassii --filter "camera=L"
 usgsxplore search declassii --filter "Camera Type=L"
 usgsxplore search declassii --filter "5e839ff8cfa94807=L"
 usgsxplore search declassii --filter "camera=KH-9 Lower Resolution Mapping Camera"
+```
 
-# select scenes from the Hexagon KH-9 satellites if they are downloadable
+Combine multiple filters:
+
+```bash
+# KH-9 scenes that are available for download
 usgsxplore search declassii --filter "camera=L & DOWNLOAD_AVAILABLE=Y"
 ```
 
-**Note**: To know which filters are available, check the command `usgsxplore info` below.
+---
 
-### Downloading
+## Python API
 
-```bash
-usgsxplore download --help
+All CLI commands have equivalent Python functions in `usgsxplore.core`:
+
+```python
+from usgsxplore.core import (
+    search_scenes,
+    download_scenes,
+    download_browse_images,
+    download_browse_strips,
+    list_datasets,
+    list_dataset_filters,
+)
 ```
 
-```text
-Usage: usgsxplore download [OPTIONS] TEXTFILE
+### Search
 
-  Download scenes with their entity ids provided in the textfile. The dataset
-  can also be provide in the first line of the textfile : #dataset=declassii
+```python
+# Print entity IDs to stdout
+search_scenes("username", "token", "landsat_tm_c2_l1",
+    location=(5.7074, 45.1611),
+    interval_date=("2010-01-01", "2020-01-01"),
+)
 
-Options:
-  -u, --username TEXT           EarthExplorer username.
-  -t, --token TEXT              EarthExplorer token.  [required]
-  -d, --dataset TEXT            Dataset
-  -p, --product-number INTEGER  The product index you want (default: None)
-  -o, --output-dir PATH         Output directory
-  -m, --max-workers INTEGER     Max thread number (default: 5)
-  --overwrite                   Overwrite existing files
-  --hide-pbar                   Hide the progress bar
-  --no-extract                  Skip the extraction of files
-  --help                        Show this message and exit.
+# Save to multiple formats
+search_scenes("username", "token", "declassii",
+    output_files=["results.gpkg", "map.html"],
+    filter_str="camera=H",
+    limit=500,
+    show_progress=True,
+)
 ```
 
-This command download scenes from their entity ids in the `TEXTFILE` and save the results in `--output-dir`.
-It also extract file in place.
+### Download
 
-### Downloading browse
-
-```bash
-usgsxplore download-browse --help
+```python
+download_scenes("username", "token", "results.txt",
+    output_dir="./data",
+    max_workers=8,
+)
 ```
 
-```text
-Usage: usgsxplore download-browse [OPTIONS] VECTOR_FILE
+### Browse images
 
-  Download browse images of a vector data file localy.
+```python
+# Download individual preview images
+download_browse_images("results.gpkg", output_dir="./previews")
 
-Options:
-  -o, --output-dir PATH  Output directory
-  --pbar                 Display a progress bar.
-  --help                 Show this message and exit.
+# Generate mosaicked GeoTIFF strips
+download_browse_strips("results.gpkg",
+    output_dir="./strips",
+    resolution=50,
+    max_workers=8,
+)
 ```
 
-### Info: datasets and filters
+### Inspect datasets and filters
 
-Information on available datasets and filters can be printed on screen with the command `usgsxplore info`
+```python
+# List datasets
+datasets = list_datasets("username", "token")
 
-```bash
-usgsxplore info --help
+# List filters for a dataset
+filters = list_dataset_filters("username", "token", "declassii")
+for f in filters:
+    print(f["fieldLabel"], "→", f["searchSql"])
 ```
 
-```text
-Usage: usgsxplore info [OPTIONS] COMMAND [ARGS]...
+For a full example notebook, see [examples/download.ipynb](./examples/download.ipynb).
 
-  Display information on available datasets and filters.
+---
 
-Options:
-  --help  Show this message and exit.
+## Contributing
 
-Commands:
-  dataset  Display the list of available datasets in the API.
-  filters  Display a list of available filter fields for a dataset.
-```
-
-**Hints**: When using `usgsxplore search`, filters will be printed to screen when typing any (wrong) value. For example,
-
-```bash
-usgsxplore search declassii -f "whatever=?"
-```
-
-will print all metadata filters that can be used for the "declassii" dataset.
-
-```text
-FilterFieldError  :  Invalid field 'whatever', choose one in :
-           field_id         field_label           sql_field
-0  5e839ff88d166638           Entity ID           ENTITY_ID
-1  5e839ff8cb91570a      Mission Number         MISSION_NBR
-2  5e839ff86e60acbb   Operations Number          REVOLUTION
-3  5e839ff8388465fa   Camera Resolution        camera_resol
-4  5e839ff8cfa94807         Camera Type              camera
-5  5e839ff87427aed4               Frame           FRAME_NBR
-6   5e839ff87129a39           Film Size           FILM_TYPE
-7  5e839ff8e45ca028          Image Type          IMAGE_TYPE
-8  5e839ff8ba6eead0  Download Available  DOWNLOAD_AVAILABLE
-```
-
-```bash
-usgsxplore search declassii -f "camera=?"
-```
-
-will print all possible values for the filter "camera".
-
-```text
-FilterValueError  :  Invalid value '?', choose one in :
-  values                              value_labels
-0                                              All
-1      H  KH-7 High Resolution Surveillance Camera
-2      L      KH-9 Lower Resolution Mapping Camera
-```
+See [CONTRIBUTING.md](./CONTRIBUTING.md).

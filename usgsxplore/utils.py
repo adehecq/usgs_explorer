@@ -461,7 +461,7 @@ def extract_files_in_place(
         try:
             if tarfile.is_tarfile(file_path):  # for .tar.gz / .tgz
                 with tarfile.open(file_path, "r:*") as tar:
-                    tar.extractall(path=gz_directory)
+                    tar.extractall(path=gz_directory, filter="data")
                 if remove_gz:
                     os.remove(file_path)
                 return f"Extracted archive: {filename}"

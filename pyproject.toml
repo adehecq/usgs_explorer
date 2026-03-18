@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "usgsxplore"
-version = "0.0.2"
+version = "0.0.3"
 description = "Search and download data or scenes from USGS API"
 authors = ["Godin Luc <godin.luc2002@gmail.com>"]
 maintainers = ["Amaury Dehecq <this-is-not-an-email@a.com>"]
@@ -34,6 +34,9 @@ ruff = "^0.11.7"
 
 [tool.poetry.scripts]
 usgsxplore = "usgsxplore.cli:cli"
+
+[tool.ruff]
+line-length = 120
 
 [build-system]
 requires = ["poetry-core"]

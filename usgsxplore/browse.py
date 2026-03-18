@@ -5,7 +5,7 @@ import requests
 import geopandas as gpd
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
-from rasterio.transform import from_origin, from_bounds
+from rasterio.transform import from_origin
 from shapely.geometry import Polygon
 from rasterio.warp import reproject, Resampling
 import rasterio
@@ -15,14 +15,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from usgsxplore.utils import get_strip_id_from_entity_id
 
 
-__all__ = ["generate_strips_from_browse", "download_browse_img", "mosaic_from_gdf"]
+__all__ = ["download_browse_strips", "fetch_browse_img", "mosaic_from_gdf"]
 
 #############################################################################################
 #                           PUBLIC FUNCTIONS
 #############################################################################################
 
 
-def generate_mosaic_strips_from_browse(
+def download_browse_strips(
     vector_file: str| Path,
     output_dir: str | Path,
     url_key: str = "browse_url",
@@ -33,26 +33,25 @@ def generate_mosaic_strips_from_browse(
     show_progress: bool = True,
 ) -> None:
     """
-    Generate mosaics (GeoTIFF) for each strip in a GeoDataFrame of image footprints.
+    Read scenes from a vector file, group them by strip, and generate one mosaic GeoTIFF per strip.
 
-    For each unique strip in `gdf` (grouped by `strip_id_key`), this function:
+    For each unique strip (derived from `entity_id`), this function:
         1. Skips the strip if the output file already exists (unless `overwrite=True`)
-        2. Downloads images from URLs in the group
+        2. Downloads browse images from URLs stored in `url_key`
         3. Reprojects and mosaics the images into a single raster
         4. Saves the raster to `output_dir/<strip_id>.tif`
 
     Parameters
     ----------
-    gdf : geopandas.GeoDataFrame
-        GeoDataFrame containing footprints and URLs of images.
+    vector_file : str or Path
+        Path to the input vector file (any format supported by geopandas).
+        Must contain `entity_id` and a URL column (default: `browse_url`).
     output_dir : str or Path
         Directory where mosaics will be saved.
-    strip_id_key : str, default "strip_id"
-        Column name in `gdf` defining strips.
     url_key : str, default "browse_url"
-        Column name in `gdf` containing image URLs.
+        Column name in the vector file containing browse image URLs.
     resolution : int, default 100
-        Pixel size for the mosaic in the CRS units.
+        Output pixel size in meters.
     resampling : rasterio.enums.Resampling, default Resampling.nearest
         Resampling method for reprojecting images.
     max_workers : int, default 4
@@ -80,7 +79,7 @@ def generate_mosaic_strips_from_browse(
             output_path = output_dir / f"{strip_id}.tif"
 
             # skip existing files if not overwrite
-            if (output_path.exists() and not overwrite): 
+            if output_path.exists() and not overwrite:
                 continue
 
             # add the task to the executor
@@ -97,7 +96,7 @@ def generate_mosaic_strips_from_browse(
             )
 
         # 2 .wait for all task to complete and add a pbar if show_progress
-        if (show_progress):
+        if show_progress:
             with tqdm(total=len(futures)) as pbar:
                 for fut in as_completed(futures):
                     try:
@@ -113,7 +112,7 @@ def generate_mosaic_strips_from_browse(
                     print(f"Error in a strip: {e}")
 
 
-def download_browse_img(url: str, grayscale: bool = True) -> np.ndarray:
+def fetch_browse_img(url: str, grayscale: bool = True) -> np.ndarray:
     """
     Download an image from a URL and return it as a NumPy array.
 
@@ -202,7 +201,7 @@ def mosaic_from_gdf(
     ) as dst:
         # 4. Loop around all row of the gdf to download all images
         for idx, row in gdf_utm.iterrows():
-            img = download_browse_img(row[url_key])
+            img = fetch_browse_img(row[url_key])
 
             height, width = img.shape[:2]
 
@@ -229,33 +228,6 @@ def mosaic_from_gdf(
 #############################################################################################
 #                           PRIVATE FUNCTIONS
 #############################################################################################
-
-
-def _compute_mosaic_size_and_transform(
-    gdf: gpd.GeoDataFrame, first_img: np.ndarray
-) -> tuple[int, int, rasterio.Affine]:
-    """
-    Compute mosaic dimensions and transform from a GeoDataFrame and first image.
-    Returns: mosaic_width, mosaic_height, mosaic_transform
-    """
-    # taille pixel à partir de la première image
-    height_src, width_src = first_img.shape[:2]
-
-    # étendue totale du GDF
-    minx, miny, maxx, maxy = gdf.union_all().bounds
-
-    # résolution pixel
-    pixel_width = (maxx - minx) / width_src
-    pixel_height = (maxy - miny) / height_src
-
-    # taille du mosaic
-    mosaic_width = int(np.ceil((maxx - minx) / pixel_width))
-    mosaic_height = int(np.ceil((maxy - miny) / pixel_height))
-
-    # transform du mosaic
-    mosaic_transform = from_origin(minx, maxy, pixel_width, pixel_height)
-
-    return mosaic_width, mosaic_height, mosaic_transform
 
 
 def _transform_from_polygon(

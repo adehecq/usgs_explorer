@@ -414,7 +414,7 @@ def download_browse_strip(
     Images are downloaded from URLs stored in the "browse_url" field of the vector file.
     The resulting mosaics are saved in the output directory.
     """
-    browse.generate_mosaic_strips_from_browse(
+    browse.download_browse_strips(
         vector_file,
         output_dir,
         resolution=resolution,
