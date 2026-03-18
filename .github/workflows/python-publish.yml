@@ -22,25 +22,17 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Set up Python
-      uses: actions/setup-python@v3
-      with:
-        python-version: '3.12'
-
     - name: Install Poetry
       uses: snok/install-poetry@v1
 
-    - name: Set up Poetry environment
-      run: |
-        poetry config virtualenvs.create false
-        poetry install
-
     - name: Update version in pyproject.toml
       run: |
-        VERSION=${{ github.event.release.tag_name }}
+        VERSION="${{ github.event.release.tag_name }}"
+        VERSION="${VERSION#v}"
         sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
 
     - name: Build and publish to PyPI
       uses: JRubics/poetry-publish@v1.16
       with:
         pypi_token: ${{ secrets.PYPI_TOKEN }}
+        python_version: '3.12'
