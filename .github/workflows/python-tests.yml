@@ -18,22 +18,19 @@ jobs:
     - name: Code checkout
       uses: actions/checkout@v4
 
-    - name: Set up Python 3.12
-      uses: actions/setup-python@v3
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
       with:
-        python-version: "3.12"
+        python-version: "3.10"
 
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-
-    - name: Install dependencies
-      run: poetry install
+    - name: Install Hatch
+      run: pip install hatch
 
     - name: Lint with Ruff
-      run: poetry run ruff check .
+      run: hatch run dev:ruff check .
 
     - name: Run Pytest
       env:
         USGS_USERNAME: ${{ secrets.USGSXPLORE_USERNAME }}
         USGS_TOKEN: ${{ secrets.USGSXPLORE_TOKEN }}
-      run: poetry run pytest
+      run: hatch run dev:pytest

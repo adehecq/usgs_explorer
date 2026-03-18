@@ -3,14 +3,14 @@
 First step clone the repo or fork it to create a pull request.
 Next setup the development environnement :
 ```bash
-# install poetry if you don't have it
-pip install poetry
+# install hatch if you don't have it
+pip install hatch
 
 # you need to be in the usgs_explorer repo
-poetry install
+hatch env create dev
 
 # install the pre-commit hooks
-poetry run pre-commit install
+hatch run dev:pre-commit install
 ```
 
 ## VSCode configuration (optional)
@@ -30,7 +30,7 @@ The line length is set to 120 characters via `[tool.ruff]` in `pyproject.toml`.
 
 Before committing make sure to passed all tests:
 ```bash
-poetry run pytest
+hatch run dev:pytest
 ```
 
 You can also run the notebooks : [download.ipynb](./examples/download.ipynb)

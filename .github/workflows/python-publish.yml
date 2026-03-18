@@ -1,10 +1,5 @@
-# This workflow will upload a Python Package using Twine when a release is created
+# This workflow will upload a Python Package using Hatch when a release is created
 # For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python#publishing-to-package-registries
-
-# This workflow uses actions that are not certified by GitHub.
-# They are provided by a third-party and are governed by
-# separate terms of service, privacy policy, and support
-# documentation.
 
 name: Upload Python Package
 
@@ -22,17 +17,22 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-
-    - name: Update version in pyproject.toml
-      run: |
-        VERSION="${{ github.event.release.tag_name }}"
-        VERSION="${VERSION#v}"
-        sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
-
-    - name: Build and publish to PyPI
-      uses: JRubics/poetry-publish@v1.16
       with:
-        pypi_token: ${{ secrets.PYPI_TOKEN }}
-        python_version: '3.12'
+        fetch-depth: 0
+
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.10"
+
+    - name: Install Hatch
+      run: pip install hatch
+
+    - name: Build package
+      run: hatch build
+
+    - name: Publish to PyPI
+      env:
+        HATCH_INDEX_USER: __token__
+        HATCH_INDEX_AUTH: ${{ secrets.PYPI_TOKEN }}
+      run: hatch publish

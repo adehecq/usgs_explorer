@@ -57,9 +57,7 @@ def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
             attributes.setdefault(field_name, []).append(field.get("value"))
 
         if len(scene["browse"]) > 0:
-            attributes.setdefault("browse_url", []).append(
-                scene["browse"][0]["browsePath"]
-            )
+            attributes.setdefault("browse_url", []).append(scene["browse"][0]["browsePath"])
         else:
             attributes.setdefault("browse_url", []).append(None)
 
@@ -78,18 +76,14 @@ def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> No
     if vector_file.endswith(".shp"):
         # here we ignore warnings that tell us all field are truncated
         with warnings.catch_warnings():
-            warnings.filterwarnings(
-                "ignore", message=r"Normalized/laundered field name: '.+' to '.+'"
-            )
+            warnings.filterwarnings("ignore", message=r"Normalized/laundered field name: '.+' to '.+'")
             gdf.to_file(vector_file)
     elif vector_file.endswith(".gpkg"):
         gdf.to_file(vector_file, driver="GPKG")
     elif vector_file.endswith(".geojson"):
         gdf.to_file(vector_file, driver="GeoJSON")
     else:
-        raise ValueError(
-            f"The file '{vector_file}' need to end with : .shp|.gpkg|.geojson"
-        )
+        raise ValueError(f"The file '{vector_file}' need to end with : .shp|.gpkg|.geojson")
 
 
 def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
@@ -157,21 +151,15 @@ def sort_strings_by_similarity(ref_str: str, list_str: list[str]) -> list[str]:
     :param list_str: list of string to be sorted
     """
     # Calculate similarity score for each string in list_str with ref_str
-    similarity_scores = [
-        SequenceMatcher(None, ref_str, str_).ratio() for str_ in list_str
-    ]
+    similarity_scores = [SequenceMatcher(None, ref_str, str_).ratio() for str_ in list_str]
 
     # Sort list_str based on similarity scores
-    sorted_list_str = [
-        str_ for _, str_ in sorted(zip(similarity_scores, list_str), reverse=True)
-    ]
+    sorted_list_str = [str_ for _, str_ in sorted(zip(similarity_scores, list_str), reverse=True)]
 
     return sorted_list_str
 
 
-def download_browse_img(
-    url_list: list[str], output_dir: str, pbar: bool = True
-) -> pd.DataFrame:
+def download_browse_img(url_list: list[str], output_dir: str, pbar: bool = True) -> pd.DataFrame:
     """
     Download all browse image with the url_list and put them into the output_dir.
     Return a recap of the downloading.
@@ -192,11 +180,7 @@ def download_browse_img(
     df = df.assign(already_download=False, status=None)
 
     # Create a set of already downloaded files for faster lookup
-    already_dl_files = {
-        file.split(".", maxsplit=1)[0]
-        for file in os.listdir(output_dir)
-        if file.endswith(".jpg")
-    }
+    already_dl_files = {file.split(".", maxsplit=1)[0] for file in os.listdir(output_dir) if file.endswith(".jpg")}
 
     # Mark already downloaded files in the DataFrame
     for url in url_list:
@@ -274,25 +258,17 @@ def format_table(data: list[list]) -> str:
     col_widths = [max(len(str(item)) for item in col) for col in zip(*data)]
 
     # consider the first line like a header
-    header = (
-        "   ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(data[0]))
-        + "\n"
-    )
+    header = "   ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(data[0])) + "\n"
     table_str += header
 
     # construct other line
     for row in data[1:]:
-        table_str += (
-            " | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row))
-            + "\n"
-        )
+        table_str += " | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)) + "\n"
 
     return table_str
 
 
-def process_download_options(
-    download_options: list[dict], product_number: int | None = None
-) -> list[dict] | None:
+def process_download_options(download_options: list[dict], product_number: int | None = None) -> list[dict] | None:
     """
     Filters and selects download options based on availability and product selection.
 
@@ -329,19 +305,11 @@ def process_download_options(
     # Handle case where multiple products are found
     if len(product_list) > 1:
         if product_number is None:
-            product_names = "\n".join(
-                f" - {i} : {p['productName']}" for i, p in enumerate(product_list)
-            )
-            raise DownloadOptionsError(
-                f"Multiple products found, you need to choose one:\n{product_names}"
-            )
+            product_names = "\n".join(f" - {i} : {p['productName']}" for i, p in enumerate(product_list))
+            raise DownloadOptionsError(f"Multiple products found, you need to choose one:\n{product_names}")
         if not (0 <= product_number < len(product_list)):
-            product_names = "\n".join(
-                f" - {i} : {p['productName']}" for i, p in enumerate(product_list)
-            )
-            raise DownloadOptionsError(
-                f"Invalid product number: {product_number}, choose one of:\n{product_names}"
-            )
+            product_names = "\n".join(f" - {i} : {p['productName']}" for i, p in enumerate(product_list))
+            raise DownloadOptionsError(f"Invalid product number: {product_number}, choose one of:\n{product_names}")
         selected_code = product_list[product_number]["productCode"]
     else:
         selected_code = product_list[0]["productCode"]
@@ -400,12 +368,8 @@ def download_scenes(
                 file_path = os.path.join(output_dir, filename)
 
                 with open(file_path, "wb") as f:
-                    for chunk in r.iter_content(
-                        chunk_size=10000 * 1024
-                    ):  # block size of 10 Mo
-                        if (
-                            stop_event.is_set()
-                        ):  # Check if stop_event has been set to stop download
+                    for chunk in r.iter_content(chunk_size=10000 * 1024):  # block size of 10 Mo
+                        if stop_event.is_set():  # Check if stop_event has been set to stop download
                             os.remove(file_path)
                             break
 
@@ -450,11 +414,7 @@ def extract_files_in_place(
     :param patterns: List of file extensions to match (e.g., [".gz", ".tgz"]).
     :param max_workers: Number of threads to use for parallel extraction
     """
-    files = [
-        f
-        for f in os.listdir(gz_directory)
-        if any(f.lower().endswith(p) for p in patterns)
-    ]
+    files = [f for f in os.listdir(gz_directory) if any(f.lower().endswith(p) for p in patterns)]
 
     def extract_file(filename: str):
         file_path = os.path.join(gz_directory, filename)
@@ -510,22 +470,22 @@ def _to_snake_case(string: str) -> str:
     """
     # 1. Strip leading/trailing whitespace
     string = string.strip()
-    
+
     # 2. Replace spaces, hyphens, and dots with underscores
     string = re.sub(r"[\s\-\.]+", "_", string)
-    
+
     # 3. Insert underscore before capital letters preceded by lowercase letters (camelCase -> snake_case)
     string = re.sub(r"(?<=[a-z0-9])([A-Z])", r"_\1", string)
-    
+
     # 4. Convert everything to lowercase
     string = string.lower()
-    
+
     # 5. Remove any duplicate underscores
     string = re.sub(r"__+", "_", string)
-    
+
     # 6. Remove leading/trailing underscores
     string = string.strip("_")
-    
+
     return string
 
 
@@ -533,7 +493,7 @@ def get_strip_id_from_entity_id(entity_id: str) -> str:
     """
     Extract the strip ID from an entity ID string.
 
-    The strip ID is defined as the entity ID **up to and including the last uppercase letter**. 
+    The strip ID is defined as the entity ID **up to and including the last uppercase letter**.
     All characters after the last uppercase letter are removed.
 
     Examples:
@@ -544,8 +504,9 @@ def get_strip_id_from_entity_id(entity_id: str) -> str:
     match = re.search(r"[A-Z](?!.*[A-Z])", entity_id)
     if not match:
         raise ValueError(f"Invalid entity_id '{entity_id}': contains no uppercase letter.")
-    
+
     # Retourne tout jusqu'à la position de cette majuscule (incluse)
     return entity_id[: match.end()]
+
 
 # End-of-file (EOF)
