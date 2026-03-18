@@ -20,7 +20,6 @@ tqdm = "^4.66.4"
 shapely = "^2.0.5"
 click = "^8.1.7"
 folium = "^0.19.5"
-matplotlib = "^3.10.7"
 rasterio = "^1.5.0"
 
 
