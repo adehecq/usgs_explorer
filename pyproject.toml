@@ -48,5 +48,9 @@ dependencies = [
     "hatch-vcs",
 ]
 
+[tool.hatch.envs.dev.scripts]
+kernel = "python -m ipykernel install --user --name usgsxplore-dev --display-name 'Python (usgsxplore dev)'"
+clean-kernel = "jupyter kernelspec uninstall -y usgsxplore-dev"
+
 [tool.ruff]
 line-length = 120

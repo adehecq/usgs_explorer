@@ -5,18 +5,11 @@ Last modified: 2024
 Author: Luc Godin
 """
 
-import gzip
 import os
 import re
-import signal
 import subprocess
-import sys
-import tarfile
-import threading
 import warnings
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from difflib import SequenceMatcher
-from shutil import copyfileobj
 from urllib.parse import urlparse
 
 import folium
@@ -25,8 +18,6 @@ import pandas as pd
 import requests
 from shapely import MultiPolygon, Point, Polygon
 from tqdm import tqdm
-
-from usgsxplore.errors import DownloadOptionsError
 
 
 def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
@@ -266,191 +257,6 @@ def format_table(data: list[list]) -> str:
         table_str += " | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)) + "\n"
 
     return table_str
-
-
-def process_download_options(download_options: list[dict], product_number: int | None = None) -> list[dict] | None:
-    """
-    Filters and selects download options based on availability and product selection.
-
-    Args:
-        download_options (list[dict]): A list of download option dictionaries,
-            each containing at least 'available', 'entityId', 'productCode', and 'productName' keys.
-        product_number (int | None, optional): Index of the product to select if multiple are found.
-            If None and multiple products are found, an exception is raised.
-
-    Returns:
-        list[dict]: A list of download options matching the selected product code.
-
-    Raises:
-        DownloadOptionsError: If no available products are found, multiple options require a choice,
-                              or the given product_number is invalid.
-    """
-
-    # Filter only the available options
-    available_options = [opt for opt in download_options if opt.get("available")]
-
-    if not available_options:
-        raise DownloadOptionsError("No product available")
-
-    # Use the entityId of the first available product to group similar products
-    entity_id = available_options[0]["entityId"]
-    product_list = []
-
-    # Collect all options that belong to the same entityId group
-    for opt in available_options:
-        if entity_id != opt["entityId"]:
-            break
-        product_list.append(opt)
-
-    # Handle case where multiple products are found
-    if len(product_list) > 1:
-        if product_number is None:
-            product_names = "\n".join(f" - {i} : {p['productName']}" for i, p in enumerate(product_list))
-            raise DownloadOptionsError(f"Multiple products found, you need to choose one:\n{product_names}")
-        if not (0 <= product_number < len(product_list)):
-            product_names = "\n".join(f" - {i} : {p['productName']}" for i, p in enumerate(product_list))
-            raise DownloadOptionsError(f"Invalid product number: {product_number}, choose one of:\n{product_names}")
-        selected_code = product_list[product_number]["productCode"]
-    else:
-        selected_code = product_list[0]["productCode"]
-
-    return [opt for opt in available_options if opt["productCode"] == selected_code]
-
-
-def download_scenes(
-    scenes: list[dict],
-    output_dir: str = ".",
-    max_threads: int = 5,
-    show_progress: bool = True,
-):
-    """
-    Download files from a list of dicts with 'entityId', 'url' and 'filesize'.
-    The filename will be: {entityId}.{extension}
-
-    :param scenes: List of dicts like {'entityId': str, 'url': str, 'filesize': int}
-    :param output_dir: Directory to save the downloaded files
-    :param max_threads: Number of concurrent download threads
-    :param show_progress: Whether to display a progress bar
-    :return: None
-    """
-    os.makedirs(output_dir, exist_ok=True)
-    session = requests.Session()
-
-    # Total size of all files
-    total_size = sum(int(item.get("filesize", 0)) for item in scenes)
-    progress_bar = (
-        tqdm(
-            total=total_size,
-            unit="B",
-            unit_scale=True,
-            desc=f"Downloading (0/{len(scenes)})",
-        )
-        if show_progress
-        else None
-    )
-
-    tqdm.set_lock(threading.Lock())  # Make tqdm thread-safe
-
-    # Create a stop event that can be used to interrupt the download
-    stop_event = threading.Event()
-
-    def download(item: dict):
-        url = item.get("url")
-        entity_id = item.get("entityId")
-        try:
-            with session.get(url, stream=True, timeout=30) as r:
-                r.raise_for_status()
-
-                # get the file name from response header
-                content_disposition = r.headers.get("Content-Disposition")
-                filename = content_disposition.split("filename=")[1].strip('"')
-                filename = filename.replace(filename.split(".")[0], entity_id)
-                file_path = os.path.join(output_dir, filename)
-
-                with open(file_path, "wb") as f:
-                    for chunk in r.iter_content(chunk_size=10000 * 1024):  # block size of 10 Mo
-                        if stop_event.is_set():  # Check if stop_event has been set to stop download
-                            os.remove(file_path)
-                            break
-
-                        f.write(chunk)
-                        if progress_bar:
-                            progress_bar.update(len(chunk))
-            return filename
-        except Exception as e:
-            return f"Error downloading {url}: {e}"
-
-    def signal_handler(sig, frame):
-        print("\nDownload interrupted.")
-        stop_event.set()  # Set the stop event to signal all threads to stop
-        if progress_bar:
-            progress_bar.close()  # Ensure the progress bar is closed properly
-        sys.exit(0)  # Exit gracefully
-
-    signal.signal(signal.SIGINT, signal_handler)
-
-    with ThreadPoolExecutor(max_workers=max_threads) as executor:
-        for i, result in enumerate(executor.map(download, scenes), start=1):
-            if progress_bar:
-                progress_bar.set_description(f"Downloading ({i}/{len(scenes)})")
-
-    if progress_bar:
-        progress_bar.close()
-
-
-def extract_files_in_place(
-    gz_directory: str,
-    show_progress: bool = True,
-    remove_gz: bool = True,
-    patterns: list[str] = [".gz", ".tgz", ".tar.gz"],
-    max_workers: int = 4,
-) -> None:
-    """
-    Extract all files in the specified folder that match the given pattern (e.g., ".gz"), using multithreading.
-
-    :param gz_directory: Directory containing the compressed files
-    :param show_progress: Display a progress bar if True
-    :param remove_gz: Remove original .gz files after extraction if True
-    :param patterns: List of file extensions to match (e.g., [".gz", ".tgz"]).
-    :param max_workers: Number of threads to use for parallel extraction
-    """
-    files = [f for f in os.listdir(gz_directory) if any(f.lower().endswith(p) for p in patterns)]
-
-    def extract_file(filename: str):
-        file_path = os.path.join(gz_directory, filename)
-        try:
-            if tarfile.is_tarfile(file_path):  # for .tar.gz / .tgz
-                with tarfile.open(file_path, "r:*") as tar:
-                    tar.extractall(path=gz_directory, filter="data")
-                if remove_gz:
-                    os.remove(file_path)
-                return f"Extracted archive: {filename}"
-            else:  # for .gz single-file
-                output_path = os.path.splitext(file_path)[0]
-                with (
-                    gzip.open(file_path, "rb") as f_in,
-                    open(output_path, "wb") as f_out,
-                ):
-                    copyfileobj(f_in, f_out)
-                if remove_gz:
-                    os.remove(file_path)
-                return f"Extracted file: {filename}"
-        except Exception as e:
-            return f"Error extracting {filename}: {e}"
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(extract_file, f): f for f in files}
-        if show_progress:
-            for _ in tqdm(
-                as_completed(futures),
-                total=len(futures),
-                desc="Extracting",
-                unit="file",
-            ):
-                pass
-        else:
-            for _ in as_completed(futures):
-                pass
 
 
 def _to_snake_case(string: str) -> str:

@@ -77,8 +77,6 @@ usgsxplore search [OPTIONS] DATASET
 
 | Option | Description |
 |--------|-------------|
-| `-u / --username` | USGS username (or `USGS_USERNAME` env var) |
-| `-t / --token` | USGS M2M token (or `USGS_TOKEN` env var) |
 | `-o / --output` | Output file — repeatable, format inferred from extension |
 | `-vf / --vector-file` | Vector file for spatial filter (`.gpkg`, `.shp`, `.geojson`) |
 | `-l / --location` | Point filter: `longitude latitude` |
@@ -114,8 +112,6 @@ usgsxplore download [OPTIONS] TEXTFILE
 
 | Option | Description |
 |--------|-------------|
-| `-u / --username` | USGS username |
-| `-t / --token` | USGS M2M token |
 | `-d / --dataset` | Dataset name (auto-read from file header if present) |
 | `-p / --product-number` | Product index when multiple products are available |
 | `-o / --output-dir` | Output directory (default: `.`) |
@@ -226,13 +222,13 @@ from usgsxplore.core import (
 
 ```python
 # Print entity IDs to stdout
-search_scenes("username", "token", "landsat_tm_c2_l1",
+search_scenes("landsat_tm_c2_l1",
     location=(5.7074, 45.1611),
     interval_date=("2010-01-01", "2020-01-01"),
 )
 
 # Save to multiple formats
-search_scenes("username", "token", "declassii",
+search_scenes("declassii",
     output_files=["results.gpkg", "map.html"],
     filter_str="camera=H",
     limit=500,
@@ -240,10 +236,16 @@ search_scenes("username", "token", "declassii",
 )
 ```
 
+Credentials are read from `USGS_USERNAME` / `USGS_TOKEN` environment variables by default, or can be passed explicitly:
+
+```python
+search_scenes("declassii", username="myuser", token="mytoken", ...)
+```
+
 ### Download
 
 ```python
-download_scenes("username", "token", "results.txt",
+download_scenes("results.txt",
     output_dir="./data",
     max_workers=8,
 )
@@ -267,10 +269,10 @@ download_browse_strips("results.gpkg",
 
 ```python
 # List datasets
-datasets = list_datasets("username", "token")
+datasets = list_datasets()
 
 # List filters for a dataset
-filters = list_dataset_filters("username", "token", "declassii")
+filters = list_dataset_filters("declassii")
 for f in filters:
     print(f["fieldLabel"], "→", f["searchSql"])
 ```
