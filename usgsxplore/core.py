@@ -12,6 +12,8 @@ from usgsxplore.api import API
 from usgsxplore.filter import SceneFilter
 import usgsxplore.utils as utils
 from usgsxplore.browse import download_browse_strips
+from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
+from usgsxplore.scene_downloader import SceneDownloader
 
 __all__ = [
     "search_scenes",
@@ -24,9 +26,9 @@ __all__ = [
 
 
 def search_scenes(
-    username: str,
-    token: str,
     dataset: str,
+    username: str = None,
+    token: str = None,
     output_files: list[str] | None = None,
     vector_file: str | None = None,
     location: tuple[float, float] | None = None,
@@ -47,12 +49,12 @@ def search_scenes(
 
     Parameters
     ----------
-    username : str
-        USGS ERS username.
-    token : str
-        USGS M2M API token.
     dataset : str
         Dataset name (e.g. "aerial_combin").
+    username : str, optional
+        USGS ERS username. Defaults to USGS_USERNAME env var.
+    token : str, optional
+        USGS M2M API token. Defaults to USGS_TOKEN env var.
     output_files : list[str] or None
         Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp, .html.
     vector_file : str or None
@@ -81,43 +83,52 @@ def search_scenes(
         g_file=vector_file,
     )
 
-    with API(username, token) as api:
-        if not output_files:
-            for batch in api.batch_search(dataset, scene_filter, limit, "summary", show_progress):
-                for scene in batch:
-                    print(scene["entityId"])
-        else:
-            # determine metadata type
-            metadata_type = "summary" if len(output_files) == 1 and output_files[0].endswith(".txt") else "full"
-            scenes = []
-            for batch in api.batch_search(dataset, scene_filter, limit, metadata_type, show_progress):
-                scenes += batch
+    try:
+        with API(username, token) as api:
+            if not output_files:
+                for batch in api.batch_search(dataset, scene_filter, limit, "summary", show_progress):
+                    for scene in batch:
+                        print(scene["entityId"])
+            else:
+                # determine metadata type
+                metadata_type = "summary" if len(output_files) == 1 and output_files[0].endswith(".txt") else "full"
+                scenes = []
+                for batch in api.batch_search(dataset, scene_filter, limit, metadata_type, show_progress):
+                    scenes += batch
 
-            for file in output_files:
-                directory = os.path.dirname(file)
-                if directory:
-                    os.makedirs(directory, exist_ok=True)
+                for file in output_files:
+                    directory = os.path.dirname(file)
+                    if directory:
+                        os.makedirs(directory, exist_ok=True)
 
-                if file.endswith(".txt"):
-                    with open(file, "w", encoding="utf-8") as f:
-                        f.write(f"#dataset={dataset}\n")
-                        for scene in scenes:
-                            f.write(scene["entityId"] + "\n")
-                elif file.endswith(".json"):
-                    with open(file, "w", encoding="utf-8") as f:
-                        json.dump(scenes, f, indent=4)
-                elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                    gdf = utils.convert_response_to_gdf(scenes)
-                    if file.endswith(".html"):
-                        utils.save_in_html(gdf, file)
-                    else:
-                        gdf.to_file(file)
+                    if file.endswith(".txt"):
+                        with open(file, "w", encoding="utf-8") as f:
+                            f.write(f"#dataset={dataset}\n")
+                            for scene in scenes:
+                                f.write(scene["entityId"] + "\n")
+                    elif file.endswith(".json"):
+                        with open(file, "w", encoding="utf-8") as f:
+                            json.dump(scenes, f, indent=4)
+                    elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
+                        gdf = utils.convert_response_to_gdf(scenes)
+                        if file.endswith(".html"):
+                            utils.save_in_html(gdf, file)
+                        else:
+                            utils.save_in_gfile(gdf, file)
+    except USGSInvalidDataset:
+        with API(username, token) as api:
+            datasets = api.dataset_names()
+        sorted_datasets = utils.sort_strings_by_similarity(dataset, datasets)[:50]
+        choices = " | ".join(sorted_datasets)
+        print(f"Invalid dataset : '{dataset}', it must be in :\n {choices}")
+    except (FilterValueError, FilterFieldError) as e:
+        print(e.__class__.__name__, " : ", e)
 
 
 def download_scenes(
-    username: str,
-    token: str,
     textfile: str,
+    username: str = None,
+    token: str = None,
     dataset: str | None = None,
     product_number: int | None = None,
     output_dir: str = ".",
@@ -131,10 +142,6 @@ def download_scenes(
 
     Parameters
     ----------
-    username : str
-        USGS ERS username.
-    token : str
-        USGS M2M API token.
     textfile : str
         Path to the text file containing entity IDs (one per line, with optional
         ``#dataset=<name>`` header line).
@@ -156,17 +163,17 @@ def download_scenes(
     """
     with API(username, token) as api:
         _, entity_ids = utils.read_textfile(textfile)
-
-        api.download(
-            dataset,
-            entity_ids,
-            product_number,
-            output_dir,
-            overwrite,
-            max_workers,
-            show_progress=show_progress,
-            extract=extract,
-        )
+        with SceneDownloader(api) as dl:
+            dl.download(
+                dataset,
+                entity_ids,
+                output_dir=output_dir,
+                product_number=product_number,
+                overwrite=overwrite,
+                max_workers=max_workers,
+                show_progress=show_progress,
+                extract=extract,
+            )
 
 
 def download_browse_images(vector_file: str, output_dir: str, show_progress: bool = True):
@@ -194,16 +201,16 @@ def download_browse_images(vector_file: str, output_dir: str, show_progress: boo
     utils.save_in_gfile(gdf, vector_file)
 
 
-def list_datasets(username: str, token: str, show_all: bool = False) -> list[str]:
+def list_datasets(username: str = None, token: str = None, show_all: bool = False) -> list[str]:
     """
     Return the list of available dataset names from the USGS M2M API.
 
     Parameters
     ----------
-    username : str
-        USGS ERS username.
-    token : str
-        USGS M2M API token.
+    username : str, optional
+        USGS ERS username. Defaults to USGS_USERNAME env var.
+    token : str, optional
+        USGS M2M API token. Defaults to USGS_TOKEN env var.
     show_all : bool
         If False (default), datasets whose name starts with ``"event"`` are excluded.
 
@@ -220,18 +227,18 @@ def list_datasets(username: str, token: str, show_all: bool = False) -> list[str
     return datasets
 
 
-def list_dataset_filters(username: str, token: str, dataset: str) -> list[dict]:
+def list_dataset_filters(dataset: str, username: str = None, token: str = None) -> list[dict]:
     """
     Return the available metadata filters for a given dataset.
 
     Parameters
     ----------
-    username : str
-        USGS ERS username.
-    token : str
-        USGS M2M API token.
     dataset : str
         Dataset name (e.g. "aerial_combin").
+    username : str, optional
+        USGS ERS username. Defaults to USGS_USERNAME env var.
+    token : str, optional
+        USGS M2M API token. Defaults to USGS_TOKEN env var.
 
     Returns
     -------
