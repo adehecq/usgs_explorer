@@ -175,3 +175,5 @@ examples/*
 .ruff_cache/
 
 CLAUDE.md
+
+dev/

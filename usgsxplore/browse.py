@@ -5,9 +5,7 @@ import requests
 import geopandas as gpd
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
-from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
-from rasterio.transform import from_gcps
 import rasterio
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -86,18 +84,19 @@ class TifSaveStrategy(SaveStrategy):
             height, width, count = img.shape[0], img.shape[1], img.shape[2]
             img_bands = np.moveaxis(img, -1, 0)
 
-        gcps = [
-            GroundControlPoint(row=0, col=0, x=float(row["nw_corner_long_dec"]), y=float(row["nw_corner_lat_dec"])),
-            GroundControlPoint(row=0, col=width, x=float(row["ne_corner_long_dec"]), y=float(row["ne_corner_lat_dec"])),
-            GroundControlPoint(
-                row=height, col=width, x=float(row["se_corner_long_dec"]), y=float(row["se_corner_lat_dec"])
-            ),
-            GroundControlPoint(
-                row=height, col=0, x=float(row["sw_corner_long_dec"]), y=float(row["sw_corner_lat_dec"])
-            ),
-        ]
-        transform = from_gcps(gcps)
+        # compute the affine transform from image corners
+        x_nw, y_nw = float(row["nw_corner_long_dec"]), float(row["nw_corner_lat_dec"])
+        x_ne, y_ne = float(row["ne_corner_long_dec"]), float(row["ne_corner_lat_dec"])
+        x_sw, y_sw = float(row["sw_corner_long_dec"]), float(row["sw_corner_lat_dec"])
 
+        transform = rasterio.Affine(
+            (x_ne - x_nw) / width,
+            (x_sw - x_nw) / height,
+            x_nw,
+            (y_ne - y_nw) / width,
+            (y_sw - y_nw) / height,
+            y_nw,
+        )
         with rasterio.open(
             output_path,
             "w",
