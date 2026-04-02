@@ -1,134 +1,274 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
+import warnings
 
 import numpy as np
 import requests
 import geopandas as gpd
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
-from rasterio.transform import from_origin
-from shapely.geometry import Polygon
-from rasterio.warp import reproject, Resampling
+from rasterio.control import GroundControlPoint
+from rasterio.crs import CRS
+from rasterio.errors import NotGeoreferencedWarning
 import rasterio
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from usgsxplore.utils import get_strip_id_from_entity_id
 
-
-__all__ = ["download_browse_strips", "fetch_browse_img", "mosaic_from_gdf"]
+__all__ = [
+    "BrowseDownloader",
+    "SaveStrategy",
+    "TifSaveStrategy",
+    "JpgSaveStrategy",
+    "fetch_browse_img",
+]
 
 #############################################################################################
-#                           PUBLIC FUNCTIONS
+#                           STRATEGY PATTERN — SAVE BACKENDS
 #############################################################################################
 
 
-def download_browse_strips(
-    vector_file: str| Path,
-    output_dir: str | Path,
-    url_key: str = "browse_url",
-    resolution: int = 100,
-    resampling: Resampling = Resampling.nearest,
-    max_workers: int = 4,
-    overwrite: bool = False,
-    show_progress: bool = True,
-) -> None:
+class SaveStrategy(ABC):
+    """Abstract base class for image save strategies used by BrowseDownloader."""
+
+    @property
+    @abstractmethod
+    def extension(self) -> str:
+        """File extension produced by this strategy (without leading dot)."""
+
+    @abstractmethod
+    def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
+        """
+        Persist `img` to `output_path`.
+
+        Parameters
+        ----------
+        img : np.ndarray
+            Image array (H, W) for grayscale or (H, W, C) for color.
+        row : dict
+            Scene metadata row (may be used for georeferencing).
+        output_path : Path
+            Destination file path (parent directory already exists).
+        """
+
+
+class TifSaveStrategy(SaveStrategy):
     """
-    Read scenes from a vector file, group them by strip, and generate one mosaic GeoTIFF per strip.
+    Save a browse image as a georeferenced GeoTIFF using corner GCPs.
 
-    For each unique strip (derived from `entity_id`), this function:
-        1. Skips the strip if the output file already exists (unless `overwrite=True`)
-        2. Downloads browse images from URLs stored in `url_key`
-        3. Reprojects and mosaics the images into a single raster
-        4. Saves the raster to `output_dir/<strip_id>.tif`
+    Requires the scene row to contain corner coordinate columns:
+    `nw/ne/se/sw_corner_long_dec` and `nw/ne/se/sw_corner_lat_dec`.
 
     Parameters
     ----------
-    vector_file : str or Path
-        Path to the input vector file (any format supported by geopandas).
-        Must contain `entity_id` and a URL column (default: `browse_url`).
+    crs : CRS or None, default None
+        CRS for the GCPs. Defaults to EPSG:4326 (WGS84).
+    **creation_opts
+        Rasterio creation options. Override the defaults:
+        ``compress="jpeg", quality=60``.
+    """
+
+    extension = "tif"
+    DEFAULT_CREATION_OPTS: dict = {"compress": "jpeg", "quality": 60}
+
+    def __init__(self, crs: CRS | None = None, **creation_opts) -> None:
+        self.crs = crs if crs is not None else CRS.from_epsg(4326)
+        self.creation_opts = {**self.DEFAULT_CREATION_OPTS, **creation_opts}
+
+    def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
+        if img.ndim == 2:
+            height, width = img.shape
+            count = 1
+            img_bands = img[np.newaxis, ...]
+        else:
+            height, width, count = img.shape[0], img.shape[1], img.shape[2]
+            img_bands = np.moveaxis(img, -1, 0)
+
+        gcps = [
+            GroundControlPoint(row=0, col=0, x=float(row["nw_corner_long_dec"]), y=float(row["nw_corner_lat_dec"])),
+            GroundControlPoint(row=0, col=width, x=float(row["ne_corner_long_dec"]), y=float(row["ne_corner_lat_dec"])),
+            GroundControlPoint(
+                row=height, col=width, x=float(row["se_corner_long_dec"]), y=float(row["se_corner_lat_dec"])
+            ),
+            GroundControlPoint(
+                row=height, col=0, x=float(row["sw_corner_long_dec"]), y=float(row["sw_corner_lat_dec"])
+            ),
+        ]
+
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
+            with rasterio.open(
+                output_path,
+                "w",
+                driver="GTiff",
+                width=width,
+                height=height,
+                count=count,
+                dtype=img.dtype,
+                **self.creation_opts,
+            ) as dst:
+                dst.write(img_bands)
+                dst.gcps = (gcps, self.crs)
+
+
+class JpgSaveStrategy(SaveStrategy):
+    """
+    Save a browse image as a JPEG file (no georeferencing).
+
+    Parameters
+    ----------
+    quality : int, default 60
+        JPEG compression quality (1–95).
+    """
+
+    extension = "jpg"
+
+    def __init__(self, quality: int = 60) -> None:
+        self.quality = quality
+
+    def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
+        Image.fromarray(img).save(output_path, format="JPEG", quality=self.quality)
+
+
+#############################################################################################
+#                           DOWNLOADER
+#############################################################################################
+
+
+class BrowseDownloader:
+    """
+    Download individual browse (preview) images from a GeoDataFrame or shapefile.
+
+    Uses a pluggable :class:`SaveStrategy` to control the output format.
+    Downloads run in parallel via a thread pool.
+
+    Parameters
+    ----------
     output_dir : str or Path
-        Directory where mosaics will be saved.
+        Directory where images will be saved.
+    strategy : SaveStrategy
+        Save backend that determines the output format. Use :class:`TifSaveStrategy`
+        for georeferenced GeoTIFFs or :class:`JpgSaveStrategy` for plain JPEGs.
     url_key : str, default "browse_url"
-        Column name in the vector file containing browse image URLs.
-    resolution : int, default 100
-        Output pixel size in meters.
-    resampling : rasterio.enums.Resampling, default Resampling.nearest
-        Resampling method for reprojecting images.
-    max_workers : int, default 4
-        Number of threads to use for parallel mosaic generation.
+        Column name containing browse image URLs.
+    name_key : str, default "entity_id"
+        Column name used to derive output filenames.
+    grayscale : bool, default True
+        If True, download images as grayscale.
     overwrite : bool, default False
-        If True, existing mosaics will be overwritten.
+        If True, overwrite existing files.
+    max_workers : int, default 4
+        Number of parallel download threads.
     show_progress : bool, default True
-        If True, display a progress bar for mosaics.
+        If True, display a tqdm progress bar.
+
+    Examples
+    --------
+    Download as georeferenced GeoTIFF:
+
+        downloader = BrowseDownloader("output/", TifSaveStrategy())
+        downloader.download("scenes.gpkg")
+
+    Download as JPEG from a GeoDataFrame:
+
+        downloader = BrowseDownloader("output/", JpgSaveStrategy(quality=90))
+        downloader.download(gdf)
+    """
+
+    def __init__(
+        self,
+        output_dir: str | Path,
+        strategy: SaveStrategy,
+        url_key: str = "browse_url",
+        name_key: str = "entity_id",
+        grayscale: bool = True,
+        overwrite: bool = False,
+        max_workers: int = 4,
+        show_progress: bool = True,
+    ) -> None:
+        self.output_dir = Path(output_dir)
+        self.strategy = strategy
+        self.url_key = url_key
+        self.name_key = name_key
+        self.grayscale = grayscale
+        self.overwrite = overwrite
+        self.max_workers = max_workers
+        self.show_progress = show_progress
+
+    def download(self, source: str | Path | gpd.GeoDataFrame) -> None:
+        """
+        Download browse images for all scenes in `source`.
+
+        Parameters
+        ----------
+        source : str, Path, or GeoDataFrame
+            Input vector file or GeoDataFrame with at least `url_key` and `name_key` columns.
+        """
+        if isinstance(source, (str, Path)):
+            gdf = gpd.read_file(source)
+        else:
+            gdf = source
+
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+
+        with requests.Session() as session:
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                futures: dict = {}
+                for _, row in gdf.iterrows():
+                    name = row[self.name_key]
+                    output_path = self.output_dir / f"{name}.{self.strategy.extension}"
+                    if output_path.exists() and not self.overwrite:
+                        continue
+                    fut = executor.submit(self._download_one, row.to_dict(), output_path, session)
+                    futures[fut] = name
+
+                if self.show_progress:
+                    with tqdm(total=len(futures), desc="Downloading browse images") as pbar:
+                        for fut in as_completed(futures):
+                            try:
+                                fut.result()
+                            except Exception as e:
+                                print(f"Error for {futures[fut]}: {e}")
+                            pbar.update(1)
+                else:
+                    for fut in as_completed(futures):
+                        try:
+                            fut.result()
+                        except Exception as e:
+                            print(f"Error for {futures[fut]}: {e}")
+
+    def _download_one(self, row: dict, output_path: Path, session: requests.Session) -> None:
+        img = fetch_browse_img(row[self.url_key], grayscale=self.grayscale, session=session)
+        self.strategy.save(img, row, output_path)
+
+
+#############################################################################################
+#                           OTHER PUBLIC FUNCTIONS
+#############################################################################################
+
+
+def fetch_browse_img(url: str, grayscale: bool = True, session: requests.Session | None = None) -> np.ndarray:
+    """
+    Download a browse image from a URL and return it as a NumPy array.
+
+    Parameters
+    ----------
+    url : str
+        URL of the browse image.
+    grayscale : bool, default True
+        If True, convert the image to grayscale (single channel).
+    session : requests.Session or None
+        Optional session for connection pooling. Falls back to `requests` module if None.
 
     Returns
     -------
-    None
+    np.ndarray
+        Image array of shape (H, W) for grayscale or (H, W, C) for color.
     """
-    output_dir = Path(output_dir)
+    client = session or requests
 
-    # read the vector file
-    gdf = gpd.read_file(vector_file)
-    gdf["strip_id"] = gdf["entity_id"].apply(get_strip_id_from_entity_id)
-    gdf.sort_values(["acquisition_date", "strip_id"], inplace=True)
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = []
-        # 1. add all tasks to the executor
-        for strip_id, group in gdf.groupby("strip_id"):
-            output_path = output_dir / f"{strip_id}.tif"
-
-            # skip existing files if not overwrite
-            if output_path.exists() and not overwrite:
-                continue
-
-            # add the task to the executor
-            futures.append(
-                executor.submit(
-                    mosaic_from_gdf,
-                    group,
-                    output_path,
-                    url_key=url_key,
-                    resolution=resolution,
-                    resampling=resampling,
-                    show_progress=False,
-                )
-            )
-
-        # 2 .wait for all task to complete and add a pbar if show_progress
-        if show_progress:
-            with tqdm(total=len(futures)) as pbar:
-                for fut in as_completed(futures):
-                    try:
-                        fut.result()
-                    except Exception as e:
-                        print(f"Error in a strip: {e}")
-                    pbar.update(1)
-        else:
-            for fut in as_completed(futures):
-                try:
-                    fut.result()
-                except Exception as e:
-                    print(f"Error in a strip: {e}")
-
-
-def fetch_browse_img(url: str, grayscale: bool = True) -> np.ndarray:
-    """
-    Download an image from a URL and return it as a NumPy array.
-
-    Args:
-        url (str): URL of the image to download.
-        grayscale (bool): If True, convert image to grayscale. Default is True.
-
-    Returns:
-        np.ndarray: Image data as a NumPy array.
-
-    Raises:
-        requests.HTTPError: If the HTTP request failed.
-        ValueError: If the image cannot be opened or decoded.
-    """
     try:
-        response = requests.get(url, timeout=10)
+        response = client.get(url, timeout=10)
         response.raise_for_status()
     except requests.RequestException as e:
         raise requests.HTTPError(f"Failed to download image from {url}") from e
@@ -136,124 +276,9 @@ def fetch_browse_img(url: str, grayscale: bool = True) -> np.ndarray:
     try:
         with Image.open(BytesIO(response.content)) as img:
             if grayscale:
-                img = img.convert("L")  # convert to grayscale
+                img = img.convert("L")
             arr = np.array(img)
     except UnidentifiedImageError as e:
         raise ValueError(f"Failed to decode image from {url}") from e
 
     return arr
-
-
-def mosaic_from_gdf(
-    gdf: gpd.GeoDataFrame,
-    output_path: str | Path,
-    url_key: str = "browse_url",
-    resolution: int = 100,
-    resampling: Resampling = Resampling.nearest,
-    show_progress: bool = True,
-) -> None:
-    """
-    Build a mosaic GeoTIFF from a GeoDataFrame of image footprints.
-
-    Downloads images from URLs in the gdf, reprojects each on a final mosaic raster,
-    and saves the result to `output_path`.
-
-    Args:
-        gdf: GeoDataFrame with image geometries and URLs.
-        output_path: Path to save the final mosaic.
-        url_key: Column name in gdf containing the image URLs.
-        resampling: Rasterio resampling method (default: nearest).
-        show_progress: If True, display a progress bar.
-    """
-    output_path = Path(output_path)
-    output_path.parent.mkdir(exist_ok=True, parents=True)
-
-    if show_progress:
-        p_bar = tqdm(desc=f"Mosaicing {output_path.name}", total=len(gdf))
-
-    # 1. reproject the gdf on a local utm
-    utm_crs = gdf.estimate_utm_crs()
-    gdf_utm = gdf.to_crs(utm_crs)
-
-    # 2. get the boundary of the gdf
-    minx, miny, maxx, maxy = gdf_utm.total_bounds
-
-    # 3. compute the mosaic width and size
-    mosaic_width = int(np.ceil((maxx - minx) / resolution))
-    mosaic_height = int(np.ceil((maxy - miny) / resolution))
-
-    mosaic_transform = from_origin(minx, maxy, resolution, resolution)
-
-    # 3. Create the mosaic raster
-    with rasterio.open(
-        output_path,
-        "w",
-        driver="GTiff",
-        width=mosaic_width,
-        height=mosaic_height,
-        count=1,
-        crs=utm_crs,
-        dtype="uint8",
-        transform=mosaic_transform,
-        nodata=0,
-        compress="jpeg",
-        quality=75,
-    ) as dst:
-        # 4. Loop around all row of the gdf to download all images
-        for idx, row in gdf_utm.iterrows():
-            img = fetch_browse_img(row[url_key])
-
-            height, width = img.shape[:2]
-
-            src_transform = _transform_from_polygon(
-                row.geometry, width=width, height=height
-            )
-
-            # 5. Reproject the source image on the mosaic
-            reproject(
-                source=img,
-                destination=rasterio.band(dst, 1),
-                resampling=resampling,
-                src_crs=utm_crs,
-                src_transform=src_transform,
-                init_dest_nodata=False,
-            )
-            if show_progress:
-                p_bar.update()
-
-    if show_progress:
-        p_bar.close()
-
-
-#############################################################################################
-#                           PRIVATE FUNCTIONS
-#############################################################################################
-
-
-def _transform_from_polygon(
-    polygon: Polygon, width: int, height: int
-) -> rasterio.Affine:
-    """
-    Compute the affine transform of a raster from its 4-corner polygon footprint.
-
-    Assumes that the polygon has **exactly 4 vertices** in the following stable order:
-        lower-left (LL), lower-right (LR), upper-right (UR), upper-left (UL)
-    """
-
-    coords = np.array(polygon.exterior.coords[:4])
-    if len(coords) < 4:
-        raise ValueError(f"Polygon has fewer than 4 points: {len(coords)}")
-    ll, lr, ur, ul = np.array(polygon.exterior.coords[:4])
-
-    # pixel vectors
-    px = (ur - ul) / width
-    py = (ll - ul) / height
-
-    return rasterio.Affine(
-        px[0],
-        py[0],
-        ul[0],
-        px[1],
-        py[1],
-        ul[1],
-    )

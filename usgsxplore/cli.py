@@ -7,15 +7,11 @@ Last modified: 2024
 Author: Luc Godin
 """
 
-import os
-
 import click
-import geopandas as gpd
 
 import usgsxplore.utils as utils
-import usgsxplore.browse as browse
 from usgsxplore.api import API
-from usgsxplore.core import search_scenes
+from usgsxplore.core import search_scenes, download_browse_images
 from usgsxplore.errors import DownloadOptionsError
 from usgsxplore.scene_downloader import SceneDownloader
 
@@ -241,71 +237,43 @@ def download(
     default="./browse_images/",
     help="Output directory",
 )
-@click.option("--pbar", is_flag=True, default=True, help="Display a progress bar.")
-def download_browse(vector_file: str, output_dir: str, pbar: bool) -> None:
-    """
-    Download browse images of a vector data file locally.
-    """
-    # create the directory if it not exist
-    os.makedirs(output_dir, exist_ok=True)
-
-    # read the vector file
-    gdf = gpd.read_file(vector_file)
-    print(gdf.shape)
-
-    # get the list of browse_url
-    url_list = gdf["browse_url"].tolist()
-
-    # download the list of url with download_browse_img
-    _ = utils.download_browse_img(url_list, output_dir, pbar)
-
-    # update the vector file with browse_path added
-    gdf = utils.update_gdf_browse(gdf, output_dir)
-    utils.save_in_gfile(gdf, vector_file)
-
-
-@click.command("download-browse-strip")
-@click.argument("vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file)
 @click.option(
-    "--output-dir",
-    "-o",
-    type=click.Path(dir_okay=True, resolve_path=True),
-    default=".",
-    help="Output directory",
-)
-@click.option(
-    "--resolution",
-    "-r",
-    type=click.INT,
-    default=100,
-    help="Resolution in meters of output mosaic",
+    "--format",
+    "-f",
+    "fmt",
+    type=click.Choice(["tif", "jpg"], case_sensitive=False),
+    default="tif",
+    show_default=True,
+    help="Output image format.",
 )
 @click.option(
     "--max-workers",
     "-m",
     type=click.INT,
-    default=5,
-    help="Max thread number (default: 5)",
+    default=4,
+    show_default=True,
+    help="Number of parallel download threads.",
 )
-@click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files")
-@click.option("--hide-pbar", is_flag=True, default=False, help="Hide the progress bar")
-def download_browse_strip(
+@click.option("--overwrite", is_flag=True, default=False, help="Overwrite existing files.")
+@click.option("--hide-pbar", is_flag=True, default=False, help="Hide the progress bar.")
+def download_browse(
     vector_file: str,
     output_dir: str,
-    resolution: int,
+    fmt: str,
     max_workers: int,
     overwrite: bool,
     hide_pbar: bool,
 ) -> None:
     """
-    Read scenes from a vector file, group them by strip, and generate one mosaic (GeoTIFF) per strip.
-    Images are downloaded from URLs stored in the "browse_url" field of the vector file.
-    The resulting mosaics are saved in the output directory.
+    Download individual browse images from a vector file.
+
+    Each scene is saved as a separate file (TIF or JPG) named after its entity_id.
+    TIF files are georeferenced using corner coordinate columns from the vector file.
     """
-    browse.download_browse_strips(
+    download_browse_images(
         vector_file,
         output_dir,
-        resolution=resolution,
+        fmt=fmt,
         max_workers=max_workers,
         overwrite=overwrite,
         show_progress=not hide_pbar,
@@ -359,7 +327,6 @@ def filters(dataset: str) -> None:
 cli.add_command(search)
 cli.add_command(download)
 cli.add_command(download_browse)
-cli.add_command(download_browse_strip)
 cli.add_command(info)
 info.add_command(dataset)
 info.add_command(filters)

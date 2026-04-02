@@ -7,11 +7,10 @@ Contains pure Python functions corresponding to the CLI commands.
 import os
 import json
 
-import geopandas as gpd
 from usgsxplore.api import API
 from usgsxplore.filter import SceneFilter
 import usgsxplore.utils as utils
-from usgsxplore.browse import download_browse_strips
+from usgsxplore.browse import BrowseDownloader, TifSaveStrategy, JpgSaveStrategy
 from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
 from usgsxplore.scene_downloader import SceneDownloader
 
@@ -19,7 +18,6 @@ __all__ = [
     "search_scenes",
     "download_scenes",
     "download_browse_images",
-    "download_browse_strips",
     "list_datasets",
     "list_dataset_filters",
 ]
@@ -176,29 +174,43 @@ def download_scenes(
             )
 
 
-def download_browse_images(vector_file: str, output_dir: str, show_progress: bool = True):
+def download_browse_images(
+    source: str,
+    output_dir: str,
+    fmt: str = "tif",
+    max_workers: int = 4,
+    overwrite: bool = False,
+    show_progress: bool = True,
+) -> None:
     """
-    Download browse (preview) images from a vector file and update it with local paths.
+    Download browse (preview) images from a vector file or GeoDataFrame.
 
-    Reads the ``browse_url`` column from the vector file, downloads each image
-    to ``output_dir``, then updates the vector file with the local file paths.
+    Each scene is saved as an individual file named after its ``entity_id``.
 
     Parameters
     ----------
-    vector_file : str
+    source : str
         Path to the input vector file (any format supported by geopandas).
-        Must contain a ``browse_url`` column.
     output_dir : str
         Directory where downloaded images are saved.
-    show_progress : bool
+    fmt : str, default "tif"
+        Output format: ``"tif"`` (georeferenced GeoTIFF) or ``"jpg"``.
+    max_workers : int, default 4
+        Number of parallel download threads.
+    overwrite : bool, default False
+        If True, overwrite existing files.
+    show_progress : bool, default True
         Whether to display a progress bar during download.
     """
-    os.makedirs(output_dir, exist_ok=True)
-    gdf = gpd.read_file(vector_file)
-    url_list = gdf["browse_url"].tolist()
-    _ = utils.download_browse_img(url_list, output_dir, show_progress)
-    gdf = utils.update_gdf_browse(gdf, output_dir)
-    utils.save_in_gfile(gdf, vector_file)
+    strategy = TifSaveStrategy() if fmt == "tif" else JpgSaveStrategy()
+    downloader = BrowseDownloader(
+        output_dir,
+        strategy,
+        overwrite=overwrite,
+        max_workers=max_workers,
+        show_progress=show_progress,
+    )
+    downloader.download(source)
 
 
 def list_datasets(username: str = None, token: str = None, show_all: bool = False) -> list[str]:
