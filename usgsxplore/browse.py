@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-import warnings
-
 import numpy as np
 import requests
 import geopandas as gpd
@@ -9,7 +7,7 @@ from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 from rasterio.control import GroundControlPoint
 from rasterio.crs import CRS
-from rasterio.errors import NotGeoreferencedWarning
+from rasterio.transform import from_gcps
 import rasterio
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -54,15 +52,19 @@ class SaveStrategy(ABC):
 
 class TifSaveStrategy(SaveStrategy):
     """
-    Save a browse image as a georeferenced GeoTIFF using corner GCPs.
+    Save a browse image as a georeferenced GeoTIFF using an affine transform
+    derived from the four corner GCPs (least-squares fit).
 
     Requires the scene row to contain corner coordinate columns:
     `nw/ne/se/sw_corner_long_dec` and `nw/ne/se/sw_corner_lat_dec`.
 
+    Note: an affine transform has 6 parameters; with 4 corner points the system
+    is overdetermined, so one point will carry a small residual — this is expected.
+
     Parameters
     ----------
     crs : CRS or None, default None
-        CRS for the GCPs. Defaults to EPSG:4326 (WGS84).
+        CRS for the output raster. Defaults to EPSG:4326 (WGS84).
     **creation_opts
         Rasterio creation options. Override the defaults:
         ``compress="jpeg", quality=60``.
@@ -94,21 +96,21 @@ class TifSaveStrategy(SaveStrategy):
                 row=height, col=0, x=float(row["sw_corner_long_dec"]), y=float(row["sw_corner_lat_dec"])
             ),
         ]
+        transform = from_gcps(gcps)
 
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
-            with rasterio.open(
-                output_path,
-                "w",
-                driver="GTiff",
-                width=width,
-                height=height,
-                count=count,
-                dtype=img.dtype,
-                **self.creation_opts,
-            ) as dst:
-                dst.write(img_bands)
-                dst.gcps = (gcps, self.crs)
+        with rasterio.open(
+            output_path,
+            "w",
+            driver="GTiff",
+            width=width,
+            height=height,
+            count=count,
+            dtype=img.dtype,
+            crs=self.crs,
+            transform=transform,
+            **self.creation_opts,
+        ) as dst:
+            dst.write(img_bands)
 
 
 class JpgSaveStrategy(SaveStrategy):
