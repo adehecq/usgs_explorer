@@ -60,11 +60,10 @@ usgsxplore download results.txt
 usgsxplore [OPTIONS] COMMAND [ARGS]...
 
 Commands:
-  search                 Search scenes in a dataset
-  download               Download scenes from a text file of entity IDs
-  download-browse        Download browse (preview) images from a vector file
-  download-browse-strip  Generate mosaicked GeoTIFF strips from browse images
-  info                   List available datasets and metadata filters
+  search           Search scenes in a dataset
+  download         Download scenes from a text file of entity IDs
+  download-browse  Download individual browse (preview) images from a vector file
+  info             List available datasets and metadata filters
 ```
 
 ### `search`
@@ -124,36 +123,29 @@ The `.txt` file header line `#dataset=<name>` is read automatically, so passing 
 
 ### `download-browse`
 
-Download browse (preview) images from a vector file and save them locally.
+Download individual browse (preview) images from a vector file. Each scene is saved as a separate file named after its `entity_id`.
 
 ```bash
 usgsxplore download-browse [OPTIONS] VECTOR_FILE
 ```
 
-Reads the `browse_url` column from the vector file, downloads images to `--output-dir`, and updates the vector file with local paths.
+TIF files are georeferenced using corner coordinate columns from the vector file. JPG files are saved without georeferencing.
 
 | Option | Description |
 |--------|-------------|
 | `-o / --output-dir` | Output directory (default: `./browse_images/`) |
-| `--pbar` | Show progress bar |
-
-### `download-browse-strip`
-
-Download browse images and mosaic them into **georeferenced GeoTIFF strips**, grouped by satellite acquisition strip.
-
-```bash
-usgsxplore download-browse-strip [OPTIONS] VECTOR_FILE
-```
-
-| Option | Description |
-|--------|-------------|
-| `-o / --output-dir` | Output directory (default: `.`) |
-| `-r / --resolution` | Output resolution in meters (default: 100) |
-| `-m / --max-workers` | Parallel download threads (default: 5) |
+| `-f / --format` | Output format: `tif` (default) or `jpg` |
+| `-m / --max-workers` | Parallel download threads (default: 4) |
 | `--overwrite` | Overwrite existing files |
 | `--hide-pbar` | Hide progress bar |
 
-This command is useful for getting a quick georeferenced overview of declassified imagery strips (e.g. KH-9 Hexagon).
+```bash
+# Download as georeferenced GeoTIFF (default)
+usgsxplore download-browse results.gpkg -o ./previews/
+
+# Download as JPEG
+usgsxplore download-browse results.gpkg -o ./previews/ --format jpg
+```
 
 ### `info`
 
@@ -212,7 +204,6 @@ from usgsxplore.core import (
     search_scenes,
     download_scenes,
     download_browse_images,
-    download_browse_strips,
     list_datasets,
     list_dataset_filters,
 )
@@ -254,15 +245,17 @@ download_scenes("results.txt",
 ### Browse images
 
 ```python
-# Download individual preview images
+# Download as georeferenced GeoTIFF (default)
 download_browse_images("results.gpkg", output_dir="./previews")
 
-# Generate mosaicked GeoTIFF strips
-download_browse_strips("results.gpkg",
-    output_dir="./strips",
-    resolution=50,
-    max_workers=8,
-)
+# Download as JPEG
+download_browse_images("results.gpkg", output_dir="./previews", fmt="jpg")
+
+# Advanced: use BrowseDownloader directly with a custom strategy
+from usgsxplore.browse import BrowseDownloader, TifSaveStrategy, JpgSaveStrategy
+
+downloader = BrowseDownloader("./previews", TifSaveStrategy(), max_workers=8)
+downloader.download("results.gpkg")
 ```
 
 ### Inspect datasets and filters
