@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
+import warnings
 import numpy as np
 import requests
 import geopandas as gpd
 from PIL import Image, UnidentifiedImageError
 from io import BytesIO
 from rasterio.crs import CRS
+from rasterio.control import GroundControlPoint
 import rasterio
 from tqdm import tqdm
+from rasterio.errors import NotGeoreferencedWarning
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -50,14 +53,13 @@ class SaveStrategy(ABC):
 
 class TifSaveStrategy(SaveStrategy):
     """
-    Save a browse image as a georeferenced GeoTIFF using an affine transform
-    derived from the four corner GCPs (least-squares fit).
+    Save a browse image as a georeferenced GeoTIFF using all four corner GCPs.
+
+    The image is written in memory with the 4 GCPs, then warped to a rectilinear
+    grid via ``rasterio.warp.reproject``, properly handling non-rectangular scenes.
 
     Requires the scene row to contain corner coordinate columns:
-    `nw/ne/se/sw_corner_long_dec` and `nw/ne/se/sw_corner_lat_dec`.
-
-    Note: an affine transform has 6 parameters; with 4 corner points the system
-    is overdetermined, so one point will carry a small residual — this is expected.
+    ``nw/ne/se/sw_corner_long_dec`` and ``nw/ne/se/sw_corner_lat_dec``.
 
     Parameters
     ----------
@@ -84,32 +86,31 @@ class TifSaveStrategy(SaveStrategy):
             height, width, count = img.shape[0], img.shape[1], img.shape[2]
             img_bands = np.moveaxis(img, -1, 0)
 
-        # compute the affine transform from image corners
-        x_nw, y_nw = float(row["nw_corner_long_dec"]), float(row["nw_corner_lat_dec"])
-        x_ne, y_ne = float(row["ne_corner_long_dec"]), float(row["ne_corner_lat_dec"])
-        x_sw, y_sw = float(row["sw_corner_long_dec"]), float(row["sw_corner_lat_dec"])
+        gcps = [
+            GroundControlPoint(row=0, col=0, x=float(row["nw_corner_long_dec"]), y=float(row["nw_corner_lat_dec"])),
+            GroundControlPoint(row=0, col=width, x=float(row["ne_corner_long_dec"]), y=float(row["ne_corner_lat_dec"])),
+            GroundControlPoint(
+                row=height, col=width, x=float(row["se_corner_long_dec"]), y=float(row["se_corner_lat_dec"])
+            ),
+            GroundControlPoint(
+                row=height, col=0, x=float(row["sw_corner_long_dec"]), y=float(row["sw_corner_lat_dec"])
+            ),
+        ]
 
-        transform = rasterio.Affine(
-            (x_ne - x_nw) / width,
-            (x_sw - x_nw) / height,
-            x_nw,
-            (y_ne - y_nw) / width,
-            (y_sw - y_nw) / height,
-            y_nw,
-        )
-        with rasterio.open(
-            output_path,
-            "w",
-            driver="GTiff",
-            width=width,
-            height=height,
-            count=count,
-            dtype=img.dtype,
-            crs=self.crs,
-            transform=transform,
-            **self.creation_opts,
-        ) as dst:
-            dst.write(img_bands)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
+            with rasterio.open(
+                output_path,
+                "w",
+                driver="GTiff",
+                width=width,
+                height=height,
+                count=count,
+                dtype=img.dtype,
+                **self.creation_opts,
+            ) as dst:
+                dst.write(img_bands)
+                dst.gcps = (gcps, self.crs)
 
 
 class JpgSaveStrategy(SaveStrategy):
