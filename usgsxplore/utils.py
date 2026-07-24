@@ -5,6 +5,8 @@ Last modified: 2024
 Author: Luc Godin
 """
 
+from __future__ import annotations
+
 import re
 import warnings
 from difflib import SequenceMatcher
@@ -90,7 +92,7 @@ def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
 
     # add footprint on the map
     for _, row in gdf.iterrows():
-        if not row.geometry.geom_type == "Point":
+        if row.geometry.geom_type != "Point":
             # create a popup to visualise the browse_img on click
             url = row["browse_url"]
             popup = folium.Popup(f'<img src="{url}" width="200px">', max_width=250)
@@ -155,12 +157,12 @@ def format_table(data: list[list]) -> str:
     col_widths = [max(len(str(item)) for item in col) for col in zip(*data)]
 
     # consider the first line like a header
-    header = "   ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(data[0])) + "\n"
+    header = "   ".join(f"{item!s:<{col_widths[i]}}" for i, item in enumerate(data[0])) + "\n"
     table_str += header
 
     # construct other line
     for row in data[1:]:
-        table_str += " | ".join(f"{str(item):<{col_widths[i]}}" for i, item in enumerate(row)) + "\n"
+        table_str += " | ".join(f"{item!s:<{col_widths[i]}}" for i, item in enumerate(row)) + "\n"
 
     return table_str
 

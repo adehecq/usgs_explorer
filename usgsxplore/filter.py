@@ -4,7 +4,10 @@ Description: this module contain multiple class for SceneFilter
 Last modified: 2024
 Author: Luc Godin
 """
-from datetime import datetime
+
+from __future__ import annotations
+
+import datetime
 
 import geopandas as gpd
 from shapely.geometry import Point, mapping
@@ -131,7 +134,7 @@ class AcquisitionFilter(dict):
         :return: True if the str_date is in iso 8601 format
         """
         try:
-            datetime.strptime(str_date, "%Y-%m-%d")
+            datetime.datetime.strptime(str_date, "%Y-%m-%d").astimezone(datetime.timezone.utc)
             return True
         except ValueError:
             return False
@@ -156,7 +159,7 @@ class MetadataFilter(dict):
     """Metadata filter."""
 
     @classmethod
-    def from_str(cls, str_repr: str) -> "MetadataFilter":
+    def from_str(cls, str_repr: str) -> MetadataFilter:
         """
         Create an instance of MetadataFilter with a string representation.
         Example of string representation : "field1=value1 & field2=value2"
@@ -260,7 +263,7 @@ class MetadataValue(MetadataFilter):
             self["operand"] = "="
 
     @classmethod
-    def from_str(cls, str_repr: str) -> "MetadataValue":
+    def from_str(cls, str_repr: str) -> MetadataValue:
         """
         Constructor with string representation.
         The string representation work like this "field=value".
@@ -350,11 +353,11 @@ class SceneFilter(dict):
             raise SceneFilterError(f"Invalid arguments: {', '.join(invalid_args)}")
 
         spatial_filter = None
-        if "g_file" in kwargs and kwargs["g_file"]:
+        if kwargs.get("g_file"):
             spatial_filter = SpatialFilterGeoJSON.from_file(kwargs["g_file"])
         elif "location" in kwargs and kwargs["location"] and len(kwargs["location"]) == 2:
             spatial_filter = SpatialFilterMbr(*Point(*kwargs["location"]).bounds)
-        elif "bbox" in kwargs and kwargs["bbox"]:
+        elif kwargs.get("bbox"):
             spatial_filter = SpatialFilterMbr(*kwargs["bbox"])
 
         acquisition_filter = None
@@ -362,13 +365,13 @@ class SceneFilter(dict):
             acquisition_filter = AcquisitionFilter(*kwargs["date_interval"])
 
         cloud_cover_filter = None
-        if "max_cloud_cover" in kwargs and kwargs["max_cloud_cover"]:
+        if kwargs.get("max_cloud_cover"):
             cloud_cover_filter = CloudCoverFilter(max_cc=kwargs["max_cloud_cover"])
 
         metadata_filter = None
-        if "meta_filter" in kwargs and kwargs["meta_filter"]:
+        if kwargs.get("meta_filter"):
             metadata_filter = MetadataFilter.from_str(kwargs["meta_filter"])
 
-        months = kwargs["months"] if "months" in kwargs else None
+        months = kwargs.get("months", None)
 
         return cls(acquisition_filter, spatial_filter, cloud_cover_filter, metadata_filter, months)

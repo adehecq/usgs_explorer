@@ -4,29 +4,31 @@ Core Python API for usgsxplore operations.
 Contains pure Python functions corresponding to the CLI commands.
 """
 
-import os
-import json
+from __future__ import annotations
 
+import json
+import os
+
+from usgsxplore import utils
 from usgsxplore.api import API
-from usgsxplore.filter import SceneFilter
-import usgsxplore.utils as utils
-from usgsxplore.browse import BrowseDownloader, TifSaveStrategy, JpgSaveStrategy
+from usgsxplore.browse import BrowseDownloader, JpgSaveStrategy, TifSaveStrategy
 from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
+from usgsxplore.filter import SceneFilter
 from usgsxplore.scene_downloader import SceneDownloader
 
 __all__ = [
-    "search_scenes",
-    "download_scenes",
     "download_browse_images",
-    "list_datasets",
+    "download_scenes",
     "list_dataset_filters",
+    "list_datasets",
+    "search_scenes",
 ]
 
 
 def search_scenes(
     dataset: str,
-    username: str = None,
-    token: str = None,
+    username: str | None = None,
+    token: str | None = None,
     output_files: list[str] | None = None,
     vector_file: str | None = None,
     location: tuple[float, float] | None = None,
@@ -125,8 +127,8 @@ def search_scenes(
 
 def download_scenes(
     textfile: str,
-    username: str = None,
-    token: str = None,
+    username: str | None = None,
+    token: str | None = None,
     dataset: str | None = None,
     product_number: int | None = None,
     output_dir: str = ".",
@@ -213,7 +215,7 @@ def download_browse_images(
     downloader.download(source)
 
 
-def list_datasets(username: str = None, token: str = None, show_all: bool = False) -> list[str]:
+def list_datasets(username: str | None = None, token: str | None = None, show_all: bool = False) -> list[str]:
     """
     Return the list of available dataset names from the USGS M2M API.
 
@@ -239,7 +241,7 @@ def list_datasets(username: str = None, token: str = None, show_all: bool = Fals
     return datasets
 
 
-def list_dataset_filters(dataset: str, username: str = None, token: str = None) -> list[dict]:
+def list_dataset_filters(dataset: str, username: str | None = None, token: str | None = None) -> list[dict]:
     """
     Return the available metadata filters for a given dataset.
 

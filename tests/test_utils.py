@@ -129,9 +129,8 @@ class TestFileExtractor:
         tar_path = directory / filename
         with tarfile.open(tar_path, "w:gz") as tar:
             for name, data in internal_files.items():
-                tmp = tempfile.NamedTemporaryFile(delete=False)
-                tmp.write(data)
-                tmp.close()
+                with tempfile.NamedTemporaryFile(delete=False) as tmp:
+                    tmp.write(data)
                 tar.add(tmp.name, arcname=name)
                 os.unlink(tmp.name)
         return tar_path

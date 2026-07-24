@@ -54,3 +54,6 @@ clean-kernel = "jupyter kernelspec uninstall -y usgsxplore-dev"
 
 [tool.ruff]
 line-length = 120
+
+[tool.ruff.lint]
+ignore = ["BLE001"]

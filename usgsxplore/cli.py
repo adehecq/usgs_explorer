@@ -7,11 +7,13 @@ Last modified: 2024
 Author: Luc Godin
 """
 
+from __future__ import annotations
+
 import click
 
-import usgsxplore.utils as utils
+from usgsxplore import utils
 from usgsxplore.api import API
-from usgsxplore.core import search_scenes, download_browse_images
+from usgsxplore.core import download_browse_images, search_scenes
 from usgsxplore.errors import DownloadOptionsError
 from usgsxplore.scene_downloader import SceneDownloader
 
@@ -210,21 +212,20 @@ def download(
     """
     _, entity_ids = utils.read_textfile(textfile)
     try:
-        with API() as api:
-            with SceneDownloader(api) as dl:
-                dl.download(
-                    dataset,
-                    entity_ids,
-                    output_dir=output_dir,
-                    product_number=product_number,
-                    overwrite=overwrite,
-                    max_workers=max_workers,
-                    show_progress=not hide_pbar,
-                    extract=not no_extract,
-                )
+        with API() as api, SceneDownloader(api) as dl:
+            dl.download(
+                dataset,
+                entity_ids,
+                output_dir=output_dir,
+                product_number=product_number,
+                overwrite=overwrite,
+                max_workers=max_workers,
+                show_progress=not hide_pbar,
+                extract=not no_extract,
+            )
     except DownloadOptionsError as e:
         click.echo(
-            f"{str(e)}\nPlease specify the number of the product you want by using the option -p or --product-number."
+            f"{e!s}\nPlease specify the number of the product you want by using the option -p or --product-number."
         )
 
 

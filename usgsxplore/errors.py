@@ -4,6 +4,7 @@ Description: module contain different Error class
 Last modified: 2024
 Author: Luc Godin
 """
+
 import pandas as pd
 
 
@@ -55,7 +56,7 @@ class FilterFieldError(Exception):
         self.field = field
 
     def __str__(self) -> str:
-        return f"Invalid field '{self.field}', choose one in :\n{str(self.df)}"
+        return f"Invalid field '{self.field}', choose one in :\n{self.df!s}"
 
 
 class FilterValueError(Exception):
@@ -71,7 +72,7 @@ class FilterValueError(Exception):
         self.value = value
 
     def __str__(self) -> str:
-        return f"Invalid value '{self.value}', choose one in :\n{str(self.df)}"
+        return f"Invalid value '{self.value}', choose one in :\n{self.df!s}"
 
 
 class AcquisitionFilterError(Exception):

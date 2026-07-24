@@ -1,24 +1,26 @@
-from abc import ABC, abstractmethod
-from pathlib import Path
-import warnings
-import numpy as np
-import requests
-import geopandas as gpd
-from PIL import Image, UnidentifiedImageError
-from io import BytesIO
-from rasterio.crs import CRS
-from rasterio.control import GroundControlPoint
-import rasterio
-from tqdm import tqdm
-from rasterio.errors import NotGeoreferencedWarning
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from __future__ import annotations
 
+import warnings
+from abc import ABC, abstractmethod
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from io import BytesIO
+from pathlib import Path
+
+import geopandas as gpd
+import numpy as np
+import rasterio
+import requests
+from PIL import Image, UnidentifiedImageError
+from rasterio.control import GroundControlPoint
+from rasterio.crs import CRS
+from rasterio.errors import NotGeoreferencedWarning
+from tqdm import tqdm
 
 __all__ = [
     "BrowseDownloader",
+    "JpgSaveStrategy",
     "SaveStrategy",
     "TifSaveStrategy",
-    "JpgSaveStrategy",
     "fetch_browse_img",
 ]
 
@@ -71,11 +73,10 @@ class TifSaveStrategy(SaveStrategy):
     """
 
     extension = "tif"
-    DEFAULT_CREATION_OPTS: dict = {"compress": "jpeg", "quality": 60}
 
     def __init__(self, crs: CRS | None = None, **creation_opts) -> None:
         self.crs = crs if crs is not None else CRS.from_epsg(4326)
-        self.creation_opts = {**self.DEFAULT_CREATION_OPTS, **creation_opts}
+        self.creation_opts = {"compress": "jpeg", "quality": 60, **creation_opts}
 
     def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
         if img.ndim == 2:
@@ -213,31 +214,30 @@ class BrowseDownloader:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        with requests.Session() as session:
-            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-                futures: dict = {}
-                for _, row in gdf.iterrows():
-                    name = row[self.name_key]
-                    output_path = self.output_dir / f"{name}.{self.strategy.extension}"
-                    if output_path.exists() and not self.overwrite:
-                        continue
-                    fut = executor.submit(self._download_one, row.to_dict(), output_path, session)
-                    futures[fut] = name
+        with requests.Session() as session, ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            futures: dict = {}
+            for _, row in gdf.iterrows():
+                name = row[self.name_key]
+                output_path = self.output_dir / f"{name}.{self.strategy.extension}"
+                if output_path.exists() and not self.overwrite:
+                    continue
+                fut = executor.submit(self._download_one, row.to_dict(), output_path, session)
+                futures[fut] = name
 
-                if self.show_progress:
-                    with tqdm(total=len(futures), desc="Downloading browse images") as pbar:
-                        for fut in as_completed(futures):
-                            try:
-                                fut.result()
-                            except Exception as e:
-                                print(f"Error for {futures[fut]}: {e}")
-                            pbar.update(1)
-                else:
+            if self.show_progress:
+                with tqdm(total=len(futures), desc="Downloading browse images") as pbar:
                     for fut in as_completed(futures):
                         try:
                             fut.result()
                         except Exception as e:
                             print(f"Error for {futures[fut]}: {e}")
+                        pbar.update(1)
+            else:
+                for fut in as_completed(futures):
+                    try:
+                        fut.result()
+                    except Exception as e:
+                        print(f"Error for {futures[fut]}: {e}")
 
     def _download_one(self, row: dict, output_path: Path, session: requests.Session) -> None:
         img = fetch_browse_img(row[self.url_key], grayscale=self.grayscale, session=session)

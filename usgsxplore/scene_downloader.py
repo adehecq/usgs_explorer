@@ -446,7 +446,7 @@ class SceneDownloader:
         output_dir: Path,
         extract: bool,
     ) -> None:
-        label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        label = datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d_%H%M%S")
 
         self.downloader.download(
             links=self.resolver.resolve(batch, label),

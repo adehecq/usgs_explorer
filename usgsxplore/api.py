@@ -7,6 +7,8 @@ Last modified: 2024
 Author: Luc Godin
 """
 
+from __future__ import annotations
+
 import datetime
 import json
 import os
@@ -28,7 +30,7 @@ API_URL = "https://m2m.cr.usgs.gov/api/api/json/stable/"
 class API:
     """EarthExplorer API."""
 
-    def __init__(self, username: str = None, token: str = None, debug_mode: bool = False) -> None:
+    def __init__(self, username: str | None = None, token: str | None = None, debug_mode: bool = False) -> None:
         """EarthExplorer API.
 
         :param username: EarthExplorer username. Defaults to USGS_USERNAME env var.
@@ -43,7 +45,7 @@ class API:
             )
         self.url = API_URL
         self.session = requests.Session()
-        self.label = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.label = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
         self.debug_mode = debug_mode
         self.login(username, token)
 
@@ -74,7 +76,7 @@ class API:
                 raise err.USGSInvalidDataset(f"{error_code}: {error_msg}.")
             raise err.USGSError(f"{error_code}: {error_msg}.")
 
-    def request(self, endpoint: str, params: dict = None, retries: int = 1, timeout: int = 40) -> dict:
+    def request(self, endpoint: str, params: dict | None = None, retries: int = 1, timeout: int = 40) -> dict:
         """
         Perform a request to the USGS M2M API with a timeout and retry mechanism.
 
@@ -408,7 +410,7 @@ class API:
                         f.write(chunk)
 
     def get_scenes_metadata(self, dataset: str, entity_ids: list[str]) -> list[dict]:
-        list_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        list_id = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
         payload = {
             "listId": list_id,
             "datasetName": dataset,

@@ -12,8 +12,7 @@ import geopandas as gpd
 import pytest
 from shapely.geometry import Polygon
 
-import usgsxplore.errors as errors
-import usgsxplore.filter as filter
+from usgsxplore import errors, filter
 
 
 def test_coordinate():
