@@ -56,7 +56,13 @@ class API:
         :raise USGSRateLimitError: If there are too many request
         :raise USGSError: If the USGS API returns a non-null error code.
         """
-        data = response.json()
+        try:
+            data = response.json()
+        except ValueError as e:
+            raise err.USGSError(
+                "USGS API returned a non-JSON response, it may be under maintenance. "
+                "Check https://m2m.cr.usgs.gov/ for status."
+            ) from e
         error_code = data.get("errorCode")
         error_msg = data.get("errorMessage")
         if error_code:
