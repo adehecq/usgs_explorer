@@ -56,9 +56,9 @@ def read_dataset_textfile(ctx: click.Context, param: click.Parameter, value: str
     return dataset
 
 
-def is_text_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
+def is_text_file(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
     "callback for verify the validity of the textfile"
-    if not value.endswith(".txt"):
+    if value is not None and not value.endswith(".txt"):
         raise click.BadParameter(f"'{value}' must be a textfile", ctx=ctx, param=param)
     return value
 
@@ -78,6 +78,7 @@ def is_vector_file(ctx: click.Context, param: click.Parameter, value: str) -> st
 # 									COMMAND LINE INTERFACE
 # ----------------------------------------------------------------------------------------------------
 @click.group()
+@click.version_option(package_name="usgsxplore")
 def cli() -> None:
     """
     Command line interface of the usgsxplore.
@@ -128,6 +129,13 @@ def cli() -> None:
 )
 @click.option("-f", "--filter", type=click.STRING, help="String representation of metadata filter")
 @click.option("-m", "--limit", type=click.INT, help="Max. results returned. Return all by default")
+@click.option(
+    "-e",
+    "--entity-ids-file",
+    type=click.Path(exists=True, file_okay=True),
+    callback=is_text_file,
+    help="Textfile of entity IDs to fetch metadata for, instead of searching (other filters are ignored).",
+)
 @click.option("--pbar", is_flag=True, default=False, help="Display a progress bar")
 def search(
     dataset: str,
@@ -139,6 +147,7 @@ def search(
     interval_date: tuple[str, str] | None,
     filter: str | None,  # pylint: disable=redefined-builtin
     limit: int | None,
+    entity_ids_file: str | None,
     pbar: bool,
 ) -> None:
     """
@@ -154,6 +163,7 @@ def search(
         interval_date=interval_date or None,
         filter_str=filter,
         limit=limit,
+        entity_ids_file=entity_ids_file,
         show_progress=pbar,
     )
 

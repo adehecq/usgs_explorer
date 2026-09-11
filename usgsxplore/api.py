@@ -410,6 +410,12 @@ class API:
                         f.write(chunk)
 
     def get_scenes_metadata(self, dataset: str, entity_ids: list[str]) -> list[dict]:
+        """Get full metadata for a list of scenes, identified by entity ID.
+
+        :param dataset: Dataset alias.
+        :param entity_ids: List of entity IDs.
+        :return: List of scene metadata.
+        """
         list_id = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
         payload = {
             "listId": list_id,
