@@ -87,7 +87,9 @@ def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
     gdf["centroid"] = gdf.to_crs(epsg=3857).geometry.centroid.to_crs(epsg=4326)
     center = gdf["centroid"].y.mean(), gdf["centroid"].x.mean()
 
-    m = folium.Map(location=center, zoom_start=3)
+    # OpenStreetMap's default tiles now reject folium/leaflet traffic under its
+    # tile usage policy, so use Esri's freely embeddable satellite basemap instead.
+    m = folium.Map(location=center, zoom_start=3, tiles="Esri.WorldImagery")
     first_col_name = gdf.columns[0]
 
     # add footprint on the map
@@ -116,17 +118,21 @@ def read_textfile(textfile: str) -> tuple[str | None, list[str]]:
     dataset = None
 
     with open(textfile, encoding="utf-8") as file:
-        first_line = file.readline().strip()
-        if first_line.startswith("#"):
-            spl = first_line.split("=", maxsplit=1)
-            if len(spl) == 2 and "dataset" in spl[0]:
-                dataset = spl[1].strip()
+        lines = file.readlines()
 
-        # loop in other line and don't take the comment
-        for line in file:
-            if not line.strip().startswith("#"):
-                spl = line.split("#", maxsplit=1)
-                list_ids.append(spl[0].strip())
+    if lines and lines[0].strip().startswith("#"):
+        spl = lines[0].strip().split("=", maxsplit=1)
+        if len(spl) == 2 and "dataset" in spl[0]:
+            dataset = spl[1].strip()
+        lines = lines[1:]
+
+    # loop in other line and don't take the comment
+    for line in lines:
+        if not line.strip().startswith("#"):
+            spl = line.split("#", maxsplit=1)
+            entity_id = spl[0].strip()
+            if entity_id:
+                list_ids.append(entity_id)
     return (dataset, list_ids)
 
 

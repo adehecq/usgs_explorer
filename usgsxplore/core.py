@@ -37,15 +37,20 @@ def search_scenes(
     interval_date: tuple[str, str] | None = None,
     filter_str: str | None = None,
     limit: int | None = None,
+    entity_ids_file: str | None = None,
     show_progress: bool = False,
 ):
     """
     Search scenes in a dataset with optional spatial, temporal, and metadata filters.
 
-    If no output files are provided, entity IDs are printed to stdout.
-    Otherwise, results are saved to the specified files. The output format is
-    inferred from the file extension: .txt (entity IDs), .json (raw metadata),
-    .gpkg/.geojson/.shp (vector), .html (interactive map).
+    If no output files are provided, entity IDs are printed to stdout (or the
+    full metadata as JSON, when entity_ids_file is used). Otherwise, results are
+    saved to the specified files. The output format is inferred from the file
+    extension: .txt (entity IDs), .json (raw metadata), .gpkg/.geojson/.shp
+    (vector), .html (interactive map).
+
+    If entity_ids_file is provided, metadata is fetched for those entity IDs
+    directly instead of running a filtered search, and all other filters are ignored.
 
     Parameters
     ----------
@@ -71,50 +76,61 @@ def search_scenes(
         Metadata filter string (e.g. "camera=H & resolution=6").
     limit : int or None
         Maximum number of scenes to return.
+    entity_ids_file : str or None
+        Path to a textfile of entity IDs (one per line). When given, metadata is
+        fetched for these entity IDs instead of running a filtered search.
     show_progress : bool
         Whether to display a progress bar during search.
     """
-    scene_filter = SceneFilter.from_args(
-        location=location,
-        bbox=bbox,
-        max_cloud_cover=clouds,
-        date_interval=interval_date,
-        meta_filter=filter_str,
-        g_file=vector_file,
-    )
-
     try:
         with API(username, token) as api:
-            if not output_files:
-                for batch in api.batch_search(dataset, scene_filter, limit, "summary", show_progress):
-                    for scene in batch:
-                        print(scene["entityId"])
+            if entity_ids_file:
+                _, entity_ids = utils.read_textfile(entity_ids_file)
+                scenes = api.get_scenes_metadata(dataset, entity_ids)
             else:
+                scene_filter = SceneFilter.from_args(
+                    location=location,
+                    bbox=bbox,
+                    max_cloud_cover=clouds,
+                    date_interval=interval_date,
+                    meta_filter=filter_str,
+                    g_file=vector_file,
+                )
+                if not output_files:
+                    for batch in api.batch_search(dataset, scene_filter, limit, "summary", show_progress):
+                        for scene in batch:
+                            print(scene["entityId"])
+                    return
+
                 # determine metadata type
                 metadata_type = "summary" if len(output_files) == 1 and output_files[0].endswith(".txt") else "full"
                 scenes = []
                 for batch in api.batch_search(dataset, scene_filter, limit, metadata_type, show_progress):
                     scenes += batch
 
-                for file in output_files:
-                    directory = os.path.dirname(file)
-                    if directory:
-                        os.makedirs(directory, exist_ok=True)
+            if not output_files:
+                print(json.dumps(scenes, indent=4))
+                return
 
-                    if file.endswith(".txt"):
-                        with open(file, "w", encoding="utf-8") as f:
-                            f.write(f"#dataset={dataset}\n")
-                            for scene in scenes:
-                                f.write(scene["entityId"] + "\n")
-                    elif file.endswith(".json"):
-                        with open(file, "w", encoding="utf-8") as f:
-                            json.dump(scenes, f, indent=4)
-                    elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                        gdf = utils.convert_response_to_gdf(scenes)
-                        if file.endswith(".html"):
-                            utils.save_in_html(gdf, file)
-                        else:
-                            utils.save_in_gfile(gdf, file)
+            for file in output_files:
+                directory = os.path.dirname(file)
+                if directory:
+                    os.makedirs(directory, exist_ok=True)
+
+                if file.endswith(".txt"):
+                    with open(file, "w", encoding="utf-8") as f:
+                        f.write(f"#dataset={dataset}\n")
+                        for scene in scenes:
+                            f.write(scene["entityId"] + "\n")
+                elif file.endswith(".json"):
+                    with open(file, "w", encoding="utf-8") as f:
+                        json.dump(scenes, f, indent=4)
+                elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
+                    gdf = utils.convert_response_to_gdf(scenes)
+                    if file.endswith(".html"):
+                        utils.save_in_html(gdf, file)
+                    else:
+                        utils.save_in_gfile(gdf, file)
     except USGSInvalidDataset:
         with API(username, token) as api:
             datasets = api.dataset_names()
