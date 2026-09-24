@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 
 from usgsxplore import utils
 from usgsxplore.api import API
@@ -199,7 +200,7 @@ def download_browse_images(
     max_workers: int = 4,
     overwrite: bool = False,
     show_progress: bool = True,
-) -> None:
+) -> list[Path]:
     """
     Download browse (preview) images from a vector file or GeoDataFrame.
 
@@ -219,6 +220,12 @@ def download_browse_images(
         If True, overwrite existing files.
     show_progress : bool, default True
         Whether to display a progress bar during download.
+
+    Returns
+    -------
+    list[Path]
+        Paths of the available images (downloaded or already existing), in `source` order.
+        Scenes whose download failed are omitted.
     """
     strategy = TifSaveStrategy() if fmt == "tif" else JpgSaveStrategy()
     downloader = BrowseDownloader(
@@ -228,7 +235,7 @@ def download_browse_images(
         max_workers=max_workers,
         show_progress=show_progress,
     )
-    downloader.download(source)
+    return downloader.download(source)
 
 
 def list_datasets(username: str | None = None, token: str | None = None, show_all: bool = False) -> list[str]:
