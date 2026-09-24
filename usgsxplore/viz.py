@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import shutil
+import contextlib
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -28,6 +28,8 @@ def generate_strip_figures(
     max_workers: int = 4,
     overwrite: bool = False,
     highlight_unavailable: bool = True,
+    work_dir: str | Path | None = None,
+    clean_work_dir: bool = True,
 ) -> None:
     """Generate one figure per strip in `source`, in parallel, under `output_dir`."""
     gdf = _as_gdf(source)
@@ -48,7 +50,9 @@ def generate_strip_figures(
             if not overwrite and output_file.exists():
                 continue
 
-            future = executor.submit(_generate_strip_figure, sub_gdf, output_file, roi_gdf, highlight_unavailable)
+            future = executor.submit(
+                _generate_strip_figure, sub_gdf, output_file, roi_gdf, highlight_unavailable, work_dir, clean_work_dir
+            )
             futures[future] = strip_id
 
         if len(futures) == 0:
@@ -72,26 +76,29 @@ def _generate_strip_figure(
     output_file: str | Path,
     roi_gdf: gpd.GeoDataFrame | None = None,
     highlight_unavailable: bool = True,
+    work_dir: str | Path | None = None,
+    clean_work_dir: bool = True,
 ) -> None:
     """Render a mosaic and ROI-context figure for a single strip.
 
     `gdf` must hold the scenes of a single strip and already have a `strip_id`
     column (see `get_strip_id_from_entity_id`). Downloaded browse images are
-    cached in a per-strip working directory next to `output_file` and removed
-    once the figure is saved. If `roi_gdf` is omitted, coverage is not computed
+    cached in `work_dir` (default: next to `output_file`) and, if `clean_work_dir`,
+    removed once the figure is saved. If `roi_gdf` is omitted, coverage is not computed
     and the context panel's basemap is zoomed out to the whole world instead
     of the ROI extent.
     """
     output_file = Path(output_file)
     strip_id = gdf["strip_id"].iloc[0]
-    work_dir = output_file.parent / f"work_{strip_id}"
+    work_dir = output_file.parent / "browse_images" if work_dir is None else Path(work_dir)
 
+    raster_paths: list[Path] = []
     try:
-        download_browse_images(gdf, work_dir, max_workers=1, show_progress=False)
+        raster_paths = download_browse_images(gdf, work_dir, max_workers=1, show_progress=False)
 
         fig, (ax_zoom, ax_ctx) = plt.subplots(2, 1, figsize=(8, 8))
 
-        mosaic, transform = _build_mosaic(gdf, work_dir)
+        mosaic, transform = _build_mosaic(raster_paths)
 
         ax_zoom.imshow(
             np.ma.masked_equal(mosaic[0], 0), cmap="gray", extent=plotting_extent(mosaic[0], transform), zorder=1
@@ -123,7 +130,12 @@ def _generate_strip_figure(
         plt.savefig(output_file, dpi=100, bbox_inches="tight")
         plt.close(fig)
     finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
+        if clean_work_dir:
+            for path in raster_paths:
+                path.unlink(missing_ok=True)
+            # work_dir is shared with other strips rendered in parallel, so only drop it once empty.
+            with contextlib.suppress(OSError):
+                work_dir.rmdir()
 
 
 def _as_gdf(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -131,17 +143,17 @@ def _as_gdf(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return source if isinstance(source, gpd.GeoDataFrame) else gpd.read_file(source)
 
 
-def _build_mosaic(gdf: gpd.GeoDataFrame, input_browse_dir: Path):
+def _build_mosaic(raster_paths: list[Path]):
     """Open browse GeoTIFFs, warp to EPSG:3857 and merge into a single mosaic."""
-    srcs = []
+    srcs, vrts = [], []
     try:
-        for row in gdf.itertuples():
-            src = rasterio.open(input_browse_dir / f"{row.entity_id}.tif")
-            srcs.append(WarpedVRT(src, crs="EPSG:3857"))
-        return merge(srcs, res=200, nodata=0)
+        for file in raster_paths:
+            srcs.append(rasterio.open(file))
+            vrts.append(WarpedVRT(srcs[-1], crs="EPSG:3857"))
+        return merge(vrts, res=200, nodata=0)
     finally:
-        for vrt in srcs:
-            vrt.close()
+        for ds in vrts + srcs:
+            ds.close()
 
 
 def _highlight_unavailable_scenes(ax, gdf_3857: gpd.GeoDataFrame):
@@ -188,4 +200,8 @@ def _plot_context(ax, gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame | N
 
 
 if __name__ == "__main__":
-    generate_strip_figures("/home/godinlu/github/aspy/my-project/dataset/metadata/scenes_metadata.gpkg", ".")
+    generate_strip_figures(
+        "/home/godinlu/test/my-project/data/kh9-mc/metadata/scenes_metadata.gpkg",
+        ".",
+        clean_work_dir=False,
+    )
