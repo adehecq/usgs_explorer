@@ -9,7 +9,10 @@ Author: Luc Godin
 
 from __future__ import annotations
 
+import logging
+
 import click
+from tqdm.contrib.logging import logging_redirect_tqdm
 
 from usgsxplore import utils
 from usgsxplore.api import API
@@ -84,6 +87,7 @@ def cli() -> None:
     Command line interface of the usgsxplore.
     Documentation : https://github.com/adehecq/usgs_explorer
     """
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
 
 
 # ----------------------------------------------------------------------------------------------------
@@ -222,7 +226,7 @@ def download(
     """
     _, entity_ids = utils.read_textfile(textfile)
     try:
-        with API() as api, SceneDownloader(api) as dl:
+        with logging_redirect_tqdm(), API() as api, SceneDownloader(api) as dl:
             dl.download(
                 dataset,
                 entity_ids,

@@ -24,7 +24,9 @@ dependencies = [
     "click",
     "folium",
     "pillow",
-    "rasterio"
+    "rasterio",
+    "matplotlib",
+    "contextily"
 ]
 
 [project.urls]
