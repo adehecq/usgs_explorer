@@ -19,6 +19,8 @@ from usgsxplore.core import download_browse_images
 from usgsxplore.utils import get_strip_id_from_entity_id
 
 WEB_MERCATOR_WORLD_EXTENT = 20037508.34
+# Half-width of the ROI-less context view, as a multiple of the strip's largest dimension.
+CONTEXT_ZOOM_FACTOR = 3
 
 
 def generate_strip_figures(
@@ -85,8 +87,8 @@ def _generate_strip_figure(
     column (see `get_strip_id_from_entity_id`). Downloaded browse images are
     cached in `work_dir` (default: next to `output_file`) and, if `clean_work_dir`,
     removed once the figure is saved. If `roi_gdf` is omitted, coverage is not computed
-    and the context panel's basemap is zoomed out to the whole world instead
-    of the ROI extent.
+    and the context panel shows a region centered on the strip instead of the
+    ROI extent.
     """
     output_file = Path(output_file)
     strip_id = gdf["strip_id"].iloc[0]
@@ -96,7 +98,7 @@ def _generate_strip_figure(
     try:
         raster_paths = download_browse_images(gdf, work_dir, max_workers=1, show_progress=False)
 
-        fig, (ax_zoom, ax_ctx) = plt.subplots(2, 1, figsize=(8, 8))
+        fig, (ax_zoom, ax_ctx) = plt.subplots(1, 2, figsize=(11, 6))
 
         mosaic, transform = _build_mosaic(raster_paths)
 
@@ -110,7 +112,8 @@ def _generate_strip_figure(
         if highlight_unavailable:
             _highlight_unavailable_scenes(ax_zoom, gdf_3857)
 
-        ctx.add_basemap(ax_zoom, zorder=0, source=ctx.providers.Esri.WorldImagery)
+        _fill_square_panel(ax_zoom)
+        ctx.add_basemap(ax_zoom, zorder=0, source=ctx.providers.Esri.WorldImagery, attribution=False)
         ax_zoom.set_title("Mosaic view", fontsize=11)
         ax_zoom.axis("off")
 
@@ -125,6 +128,7 @@ def _generate_strip_figure(
         )
 
         _plot_context(ax_ctx, gdf_3857, roi_3857)
+        fig.text(0.5, 0, "Basemap: Esri World Imagery", ha="center", va="top", fontsize=7, color="gray")
 
         plt.tight_layout()
         plt.savefig(output_file, dpi=100, bbox_inches="tight")
@@ -141,6 +145,13 @@ def _generate_strip_figure(
 def _as_gdf(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Load a GeoDataFrame from a file path, or pass one through unchanged."""
     return source if isinstance(source, gpd.GeoDataFrame) else gpd.read_file(source)
+
+
+def _fill_square_panel(ax):
+    """Widen the data limits so the map fills a square panel instead of shrinking to its extent."""
+    ax.set(aspect="equal", adjustable="datalim", box_aspect=1)
+    # Limits are only adjusted at draw time, but the basemap is fetched for the current ones.
+    ax.apply_aspect()
 
 
 def _build_mosaic(raster_paths: list[Path]):
@@ -184,7 +195,7 @@ def _compute_coverage(gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame) ->
 def _plot_context(ax, gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame | None):
     """Plot the strip footprint overlaid on the ROI with a satellite basemap.
 
-    When no ROI is given, the basemap is zoomed out to the whole world instead.
+    When no ROI is given, the view is a square region centered on the strip instead.
     """
     strip_union = gpd.GeoDataFrame(geometry=[gdf_3857.union_all()], crs="EPSG:3857")
     if roi_3857 is not None:
@@ -192,10 +203,16 @@ def _plot_context(ax, gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame | N
     strip_union.plot(ax=ax, color="yellow", alpha=0.4, zorder=2)
     strip_union.boundary.plot(ax=ax, color="yellow", linewidth=1.5, zorder=3)
     if roi_3857 is None:
-        ax.set_xlim(-WEB_MERCATOR_WORLD_EXTENT, WEB_MERCATOR_WORLD_EXTENT)
-        ax.set_ylim(-WEB_MERCATOR_WORLD_EXTENT, WEB_MERCATOR_WORLD_EXTENT)
-    ctx.add_basemap(ax, zorder=0, source=ctx.providers.Esri.WorldImagery)
-    ax.set_title("Footprint in ROI" if roi_3857 is not None else "Footprint (world view)", fontsize=11)
+        minx, miny, maxx, maxy = strip_union.total_bounds
+        cx, cy = (minx + maxx) / 2, (miny + maxy) / 2
+        half = CONTEXT_ZOOM_FACTOR * max(maxx - minx, maxy - miny)
+        # Tiles do not exist beyond the Web Mercator bounds, which high-latitude strips would exceed.
+        cy = np.clip(cy, half - WEB_MERCATOR_WORLD_EXTENT, WEB_MERCATOR_WORLD_EXTENT - half)
+        ax.set_xlim(cx - half, cx + half)
+        ax.set_ylim(cy - half, cy + half)
+    _fill_square_panel(ax)
+    ctx.add_basemap(ax, zorder=0, source=ctx.providers.Esri.WorldImagery, attribution=False)
+    ax.set_title("Footprint in ROI" if roi_3857 is not None else "Footprint (regional view)", fontsize=11)
     ax.axis("off")
 
 
