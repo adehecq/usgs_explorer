@@ -33,7 +33,12 @@ def generate_strip_figures(
     work_dir: str | Path | None = None,
     clean_work_dir: bool = True,
 ) -> None:
-    """Generate one figure per strip in `source`, in parallel, under `output_dir`."""
+    """Generate one `<strip_id>.jpg` figure per strip in `source`, in parallel, under `output_dir`.
+
+    Each figure shows the browse-image mosaic of the strip next to a context map. If
+    `highlight_unavailable`, scenes whose `download_available` column is False are shaded
+    in red. Strips that fail are reported as warnings without stopping the others.
+    """
     gdf = _as_gdf(source)
     roi_gdf = _as_gdf(roi_source) if roi_source is not None else None
 

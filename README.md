@@ -63,6 +63,7 @@ Commands:
   search           Search scenes in a dataset
   download         Download scenes from a text file of entity IDs
   download-browse  Download individual browse (preview) images from a vector file
+  strip-viz        Generate one preview figure per strip from a vector file
   info             List available datasets and metadata filters
 ```
 
@@ -145,6 +146,28 @@ usgsxplore download-browse results.gpkg -o ./previews/
 
 # Download as JPEG
 usgsxplore download-browse results.gpkg -o ./previews/ --format jpg
+```
+
+### `strip-viz`
+
+Generate one figure per strip from a vector file (produced by `search`). Scenes are grouped into strips by `entity_id`; for each strip, browse images are downloaded and mosaicked, and a `<strip_id>.jpg` is saved with a mosaic view next to a context map.
+
+```bash
+usgsxplore strip-viz [OPTIONS] VECTOR_FILE
+```
+
+| Option | Description |
+|--------|-------------|
+| `-o / --output-dir` | Output directory (default: `./strip_viz/`) |
+| `-roi / --roi-vector-file` | Region Of Interest: drawn on the context map, and its coverage by the strip is shown in the title |
+| `-m / --max-workers` | Strips rendered in parallel (default: 4) |
+| `--overwrite` | Regenerate existing figures |
+| `--highlight-unavailable / --no-highlight-unavailable` | Shade in red the scenes not available for download (default: on, needs a `download_available` column) |
+| `--work-dir` | Where browse images are downloaded (default: `OUTPUT_DIR/browse_images`) |
+| `--clean / --no-clean` | Delete downloaded browse images once figures are saved (default: on) |
+
+```bash
+usgsxplore strip-viz results.gpkg -o ./strips/ -roi roi.geojson --no-clean
 ```
 
 ### `info`
@@ -256,6 +279,14 @@ from usgsxplore.browse import BrowseDownloader, TifSaveStrategy, JpgSaveStrategy
 
 downloader = BrowseDownloader("./previews", TifSaveStrategy(), max_workers=8)
 downloader.download("results.gpkg")
+```
+
+### Strip figures
+
+```python
+from usgsxplore.viz import generate_strip_figures
+
+generate_strip_figures("results.gpkg", "./strips", roi_source="roi.geojson")
 ```
 
 ### Inspect datasets and filters

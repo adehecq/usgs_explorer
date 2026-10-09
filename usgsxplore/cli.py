@@ -295,6 +295,82 @@ def download_browse(
     )
 
 
+@click.command("strip-viz")
+@click.argument("vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file)
+@click.option(
+    "--output-dir",
+    "-o",
+    type=click.Path(dir_okay=True, resolve_path=True),
+    default="./strip_viz/",
+    show_default=True,
+    help="Output directory for the strip figures.",
+)
+@click.option(
+    "--roi-vector-file",
+    "-roi",
+    type=click.Path(exists=True, file_okay=True),
+    callback=is_vector_file,
+    help="Vector file of the Region Of Interest (ROI). When given, it is drawn on the context panel "
+    "and the ROI coverage of each strip is shown in the title.",
+)
+@click.option(
+    "--max-workers",
+    "-m",
+    type=click.INT,
+    default=4,
+    show_default=True,
+    help="Number of strips rendered in parallel (one process each).",
+)
+@click.option("--overwrite", is_flag=True, default=False, help="Regenerate figures that already exist.")
+@click.option(
+    "--highlight-unavailable/--no-highlight-unavailable",
+    default=True,
+    show_default=True,
+    help="Shade in red the scenes that are not available for download "
+    "(requires a 'download_available' column in the vector file).",
+)
+@click.option(
+    "--work-dir",
+    type=click.Path(dir_okay=True, resolve_path=True),
+    help="Directory where browse images are downloaded. [default: OUTPUT_DIR/browse_images]",
+)
+@click.option(
+    "--clean/--no-clean",
+    default=True,
+    show_default=True,
+    help="Delete downloaded browse images once figures are saved.",
+)
+def strip_viz(
+    vector_file: str,
+    output_dir: str,
+    roi_vector_file: str | None,
+    max_workers: int,
+    overwrite: bool,
+    highlight_unavailable: bool,
+    work_dir: str | None,
+    clean: bool,
+) -> None:
+    """
+    Generate one preview figure per strip from a vector file.
+
+    Scenes are grouped into strips by entity_id. For each strip, browse images are
+    downloaded and mosaicked, and a JPG figure named after the strip id is saved with
+    a mosaic view next to a context map (centered on the ROI if provided).
+    """
+    from usgsxplore.viz import generate_strip_figures
+
+    generate_strip_figures(
+        vector_file,
+        output_dir,
+        roi_vector_file,
+        max_workers=max_workers,
+        overwrite=overwrite,
+        highlight_unavailable=highlight_unavailable,
+        work_dir=work_dir,
+        clean_work_dir=clean,
+    )
+
+
 @click.group()
 def info() -> None:
     """
@@ -343,6 +419,7 @@ cli.add_command(search)
 cli.add_command(download)
 cli.add_command(download_browse)
 cli.add_command(info)
+cli.add_command(strip_viz)
 info.add_command(dataset)
 info.add_command(filters)
 
