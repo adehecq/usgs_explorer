@@ -1,4 +1,9 @@
-[![Tests](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml/badge.svg)](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/usgsxplore)](https://pypi.org/project/usgsxplore/)
+[![Python](https://img.shields.io/pypi/pyversions/usgsxplore)](https://pypi.org/project/usgsxplore/)
+[![Downloads](https://static.pepy.tech/badge/usgsxplore)](https://pepy.tech/project/usgsxplore)
+[![Lint](https://github.com/adehecq/usgs_explorer/actions/workflows/lint.yml/badge.svg)](https://github.com/adehecq/usgs_explorer/actions/workflows/lint.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 # usgsxplore
 

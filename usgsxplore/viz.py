@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 
@@ -47,7 +48,8 @@ def generate_strip_figures(
 
     gdf = gdf.assign(strip_id=gdf["entity_id"].map(get_strip_id_from_entity_id)).sort_values(["strip_id", "entity_id"])
 
-    with ProcessPoolExecutor(max_workers=max_workers) as executor:
+    # fork() in a multi-threaded parent (requests, tqdm) can deadlock the workers
+    with ProcessPoolExecutor(max_workers=max_workers, mp_context=multiprocessing.get_context("spawn")) as executor:
         futures = {}
 
         for strip_id, sub_gdf in gdf.groupby("strip_id"):

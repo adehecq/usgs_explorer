@@ -66,9 +66,9 @@ def is_text_file(ctx: click.Context, param: click.Parameter, value: str | None) 
     return value
 
 
-def is_vector_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
+def is_vector_file(ctx: click.Context, param: click.Parameter, value: str | None) -> str | None:
     "callback for verify the validity of the vector file"
-    if not value.endswith((".shp", ".gpkg", ".geojson")):
+    if value is not None and not value.endswith((".shp", ".gpkg", ".geojson")):
         raise click.BadParameter(
             f"'{value}' must be a vector data file (.gpkg, .shp, .geojson)",
             ctx=ctx,

@@ -45,7 +45,7 @@ class API:
             )
         self.url = API_URL
         self.session = requests.Session()
-        self.label = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+        self.label = datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d_%H%M%S")
         self.debug_mode = debug_mode
         self.login(username, token)
 
@@ -416,7 +416,7 @@ class API:
         :param entity_ids: List of entity IDs.
         :return: List of scene metadata.
         """
-        list_id = datetime.datetime.now(tz=datetime.timezone.utc).strftime("%Y%m%d_%H%M%S")
+        list_id = datetime.datetime.now(tz=datetime.UTC).strftime("%Y%m%d_%H%M%S")
         payload = {
             "listId": list_id,
             "datasetName": dataset,

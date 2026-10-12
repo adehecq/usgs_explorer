@@ -134,7 +134,7 @@ class AcquisitionFilter(dict):
         :return: True if the str_date is in iso 8601 format
         """
         try:
-            datetime.datetime.strptime(str_date, "%Y-%m-%d").astimezone(datetime.timezone.utc)
+            datetime.datetime.strptime(str_date, "%Y-%m-%d").astimezone(datetime.UTC)
             return True
         except ValueError:
             return False
