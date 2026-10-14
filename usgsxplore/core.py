@@ -7,8 +7,11 @@ Contains pure Python functions corresponding to the CLI commands.
 from __future__ import annotations
 
 import json
-import os
+from collections.abc import Sequence
 from pathlib import Path
+
+import geopandas as gpd
+from shapely.geometry import Point, box
 
 from usgsxplore import utils
 from usgsxplore.api import API
@@ -30,15 +33,15 @@ def search_scenes(
     dataset: str,
     username: str | None = None,
     token: str | None = None,
-    output_files: list[str] | None = None,
-    vector_file: str | None = None,
+    output_files: Sequence[str | Path] | None = None,
+    vector_file: str | Path | None = None,
     location: tuple[float, float] | None = None,
     bbox: tuple[float, float, float, float] | None = None,
     clouds: int | None = None,
     interval_date: tuple[str, str] | None = None,
     filter_str: str | None = None,
     limit: int | None = None,
-    entity_ids_file: str | None = None,
+    entity_ids_file: str | Path | None = None,
     show_progress: bool = False,
 ):
     """
@@ -48,7 +51,8 @@ def search_scenes(
     full metadata as JSON, when entity_ids_file is used). Otherwise, results are
     saved to the specified files. The output format is inferred from the file
     extension: .txt (entity IDs), .json (raw metadata), .gpkg/.geojson/.shp
-    (vector), .html (interactive map).
+    (vector), .html (interactive map), .png/.jpg/.jpeg (footprint image over a
+    satellite basemap, with the spatial filter outlined; skipped when no scene is found).
 
     If entity_ids_file is provided, metadata is fetched for those entity IDs
     directly instead of running a filtered search, and all other filters are ignored.
@@ -62,7 +66,8 @@ def search_scenes(
     token : str, optional
         USGS M2M API token. Defaults to USGS_TOKEN env var.
     output_files : list[str] or None
-        Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp, .html.
+        Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp, .html,
+        .png, .jpg, .jpeg.
     vector_file : str or None
         Path to a vector file used as spatial filter.
     location : tuple[float, float] or None
@@ -104,7 +109,9 @@ def search_scenes(
                     return
 
                 # determine metadata type
-                metadata_type = "summary" if len(output_files) == 1 and output_files[0].endswith(".txt") else "full"
+                metadata_type = (
+                    "summary" if len(output_files) == 1 and str(output_files[0]).endswith(".txt") else "full"
+                )
                 scenes = []
                 for batch in api.batch_search(dataset, scene_filter, limit, metadata_type, show_progress):
                     scenes += batch
@@ -113,25 +120,33 @@ def search_scenes(
                 print(json.dumps(scenes, indent=4))
                 return
 
-            for file in output_files:
-                directory = os.path.dirname(file)
-                if directory:
-                    os.makedirs(directory, exist_ok=True)
+            needs_gdf = any(Path(file).suffix not in {".txt", ".json"} for file in output_files)
+            gdf = utils.convert_response_to_gdf(scenes) if needs_gdf else None
 
-                if file.endswith(".txt"):
-                    with open(file, "w", encoding="utf-8") as f:
-                        f.write(f"#dataset={dataset}\n")
-                        for scene in scenes:
-                            f.write(scene["entityId"] + "\n")
-                elif file.endswith(".json"):
-                    with open(file, "w", encoding="utf-8") as f:
-                        json.dump(scenes, f, indent=4)
-                elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                    gdf = utils.convert_response_to_gdf(scenes)
-                    if file.endswith(".html"):
-                        utils.save_in_html(gdf, file)
-                    else:
+            for file in output_files:
+                Path(file).parent.mkdir(exist_ok=True, parents=True)
+
+                match Path(file).suffix:
+                    case ".txt":
+                        with open(file, "w", encoding="utf-8") as f:
+                            f.write(f"#dataset={dataset}\n")
+                            for scene in scenes:
+                                f.write(scene["entityId"] + "\n")
+                    case ".json":
+                        with open(file, "w", encoding="utf-8") as f:
+                            json.dump(scenes, f, indent=4)
+                    case ".gpkg" | ".geojson" | ".shp":
                         utils.save_in_gfile(gdf, file)
+                    case ".html":
+                        utils.save_in_html(gdf, file)
+                    case ".png" | ".jpg" | ".jpeg":
+                        if gdf.empty:
+                            print(f"No scenes found, skipping '{file}'")
+                            continue
+                        # Imported lazily: viz imports core, and pulls in heavy plotting libraries.
+                        from usgsxplore.viz import generate_scenes_footprint
+
+                        generate_scenes_footprint(gdf, file, _roi_source(vector_file, location, bbox), overwrite=True)
     except USGSInvalidDataset:
         with API(username, token) as api:
             datasets = api.dataset_names()
@@ -140,6 +155,21 @@ def search_scenes(
         print(f"Invalid dataset : '{dataset}', it must be in :\n {choices}")
     except (FilterValueError, FilterFieldError) as e:
         print(e.__class__.__name__, " : ", e)
+
+
+def _roi_source(
+    vector_file: str | Path | None,
+    location: tuple[float, float] | None,
+    bbox: tuple[float, float, float, float] | None,
+) -> str | Path | gpd.GeoDataFrame | None:
+    """Return the spatial filter as a drawable ROI, with the same precedence as `SceneFilter.from_args`."""
+    if vector_file:
+        return vector_file
+    if location:
+        return gpd.GeoDataFrame(geometry=[Point(*location)], crs="EPSG:4326")
+    if bbox:
+        return gpd.GeoDataFrame(geometry=[box(*bbox)], crs="EPSG:4326")
+    return None
 
 
 def download_scenes(

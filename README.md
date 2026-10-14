@@ -49,8 +49,8 @@ export USGS_TOKEN=<your_token>
 # Search for Landsat scenes at a location between 2010 and 2020
 usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
 
-# Search for Hexagon KH-9 scenes and export to GeoPackage + HTML map
-usgsxplore search declassii --filter "camera=H" --output results.gpkg --output map.html
+# Search for Hexagon KH-9 scenes and export to GeoPackage + HTML map + footprint image
+usgsxplore search declassii --filter "camera=H" --output results.gpkg --output map.html --output footprint.png
 
 # Download the first 10 results
 usgsxplore search landsat_tm_c2_l1 --limit 10 --output results.txt
@@ -90,6 +90,7 @@ usgsxplore search [OPTIONS] DATASET
 | `-i / --interval-date` | Date range: `YYYY-MM-DD YYYY-MM-DD` |
 | `-f / --filter` | Metadata filter string (see [Filter syntax](#filter-syntax)) |
 | `-m / --limit` | Max number of results (default: all) |
+| `--entity-ids-file` | Text file of entity IDs to fetch metadata for, instead of searching (other filters are ignored) |
 | `--pbar` | Show progress bar |
 
 **Output formats:**
@@ -100,11 +101,12 @@ usgsxplore search [OPTIONS] DATASET
 | `.json` | Raw API response with full metadata |
 | `.gpkg` / `.shp` / `.geojson` | Vector file with scene footprints |
 | `.html` | Interactive map for quick visualization |
+| `.png` / `.jpg` / `.jpeg` | Static image of scene footprints over a satellite basemap, with the spatial filter (vector file, bbox or location) outlined in red |
 
 Multiple outputs can be specified simultaneously:
 
 ```bash
-usgsxplore search declassii --filter "camera=H" --output scenes.gpkg --output map.html
+usgsxplore search declassii --filter "camera=H" --output scenes.gpkg --output map.html --output footprint.png
 ```
 
 ### `download`
@@ -248,7 +250,7 @@ search_scenes("landsat_tm_c2_l1",
 
 # Save to multiple formats
 search_scenes("declassii",
-    output_files=["results.gpkg", "map.html"],
+    output_files=["results.gpkg", "map.html", "footprint.png"],
     filter_str="camera=H",
     limit=500,
     show_progress=True,
@@ -286,11 +288,15 @@ downloader = BrowseDownloader("./previews", TifSaveStrategy(), max_workers=8)
 downloader.download("results.gpkg")
 ```
 
-### Strip figures
+### Figures
 
 ```python
-from usgsxplore.viz import generate_strip_figures
+from usgsxplore.viz import generate_scenes_footprint, generate_strip_figures
 
+# One image of all scene footprints, with the ROI outlined (the output directory must exist)
+generate_scenes_footprint("results.gpkg", "footprint.png", roi_source="roi.geojson")
+
+# One figure per strip
 generate_strip_figures("results.gpkg", "./strips", roi_source="roi.geojson")
 ```
 

@@ -28,7 +28,7 @@ def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: tu
     """
     Callback use to check the format of the output file of the search command.
     """
-    formats = (".txt", ".json", ".gpkg", ".shp", ".geojson", ".html")
+    formats = (".txt", ".json", ".gpkg", ".shp", ".geojson", ".html", ".png", ".jpg", ".jpeg")
     for filename in value:
         if not filename.endswith(formats):
             choices = " | ".join(formats)
@@ -100,7 +100,7 @@ def cli() -> None:
     "--output",
     type=click.Path(file_okay=True),
     multiple=True,
-    help="Output file : (txt, json, html, gpkg, shp, geojson)",
+    help="Output file : (txt, json, html, gpkg, shp, geojson, png, jpg, jpeg)",
     callback=is_valid_output_format,
 )
 @click.option(
