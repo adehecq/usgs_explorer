@@ -357,7 +357,7 @@ def strip_viz(
     downloaded and mosaicked, and a JPG figure named after the strip id is saved with
     a mosaic view next to a context map (centered on the ROI if provided).
     """
-    from usgsxplore.viz import generate_strip_figures
+    from usgsxplore.viz.strip_figures import generate_strip_figures
 
     generate_strip_figures(
         vector_file,

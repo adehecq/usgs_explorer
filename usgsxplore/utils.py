@@ -10,8 +10,8 @@ from __future__ import annotations
 import re
 import warnings
 from difflib import SequenceMatcher
+from pathlib import Path
 
-import folium
 import geopandas as gpd
 from shapely import MultiPolygon, Point, Polygon
 
@@ -52,6 +52,11 @@ def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(data=attributes, geometry=geometries, crs="EPSG:4326")
 
 
+def as_gdf(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Load a GeoDataFrame from a file path, or pass one through unchanged."""
+    return source if isinstance(source, gpd.GeoDataFrame) else gpd.read_file(source)
+
+
 def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> None:
     """
     This function save the geodataframe into the vector_file given
@@ -71,40 +76,6 @@ def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> No
         gdf.to_file(vector_file, driver="GeoJSON")
     else:
         raise ValueError(f"The file '{vector_file}' need to end with : .shp|.gpkg|.geojson")
-
-
-def save_in_html(gdf: gpd.GeoDataFrame, html_file: str = "scenes.html") -> None:
-    """This function save the geodataframe into an html file for quick visualisation.
-    It use folium.
-
-    Args:
-        gdf (gpd.GeoDataFrame): geodataframe that will be saved
-        html_file (str, optional): output html file. Defaults to "scenes.html".
-    """
-    if not html_file.endswith(".html"):
-        raise ValueError(f"The file '{html_file}' need to be an html file.")
-    # calculate the center of the map
-    gdf["centroid"] = gdf.to_crs(epsg=3857).geometry.centroid.to_crs(epsg=4326)
-    center = gdf["centroid"].y.mean(), gdf["centroid"].x.mean()
-
-    # OpenStreetMap's default tiles now reject folium/leaflet traffic under its
-    # tile usage policy, so use Esri's freely embeddable satellite basemap instead.
-    m = folium.Map(location=center, zoom_start=3, tiles="Esri.WorldImagery")
-    first_col_name = gdf.columns[0]
-
-    # add footprint on the map
-    for _, row in gdf.iterrows():
-        if row.geometry.geom_type != "Point":
-            # create a popup to visualise the browse_img on click
-            url = row["browse_url"]
-            popup = folium.Popup(f'<img src="{url}" width="200px">', max_width=250)
-            folium.GeoJson(
-                row.geometry,
-                tooltip=f"{first_col_name}: {row[first_col_name]}",
-                popup=popup,
-            ).add_to(m)
-
-    m.save(html_file)
 
 
 def read_textfile(textfile: str) -> tuple[str | None, list[str]]:

@@ -103,6 +103,8 @@ usgsxplore search [OPTIONS] DATASET
 | `.html` | Interactive map for quick visualization |
 | `.png` / `.jpg` / `.jpeg` | Static image of scene footprints over a satellite basemap, with the spatial filter (vector file, bbox or location) outlined in red |
 
+`.html` and image outputs are skipped when the search returns no scenes.
+
 Multiple outputs can be specified simultaneously:
 
 ```bash
@@ -291,7 +293,12 @@ downloader.download("results.gpkg")
 ### Figures
 
 ```python
-from usgsxplore.viz import generate_scenes_footprint, generate_strip_figures
+from usgsxplore.viz.html_map import generate_html_map
+from usgsxplore.viz.scenes_footprint import generate_scenes_footprint
+from usgsxplore.viz.strip_figures import generate_strip_figures
+
+# Interactive map of scene footprints, with browse images in popups
+generate_html_map("results.gpkg", "map.html")
 
 # One image of all scene footprints, with the ROI outlined (the output directory must exist)
 generate_scenes_footprint("results.gpkg", "footprint.png", roi_source="roi.geojson")

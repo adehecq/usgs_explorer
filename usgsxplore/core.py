@@ -137,14 +137,15 @@ def search_scenes(
                             json.dump(scenes, f, indent=4)
                     case ".gpkg" | ".geojson" | ".shp":
                         utils.save_in_gfile(gdf, file)
+                    case ".html" | ".png" | ".jpg" | ".jpeg" if gdf.empty:
+                        print(f"No scenes found, skipping '{file}'")
                     case ".html":
-                        utils.save_in_html(gdf, file)
+                        from usgsxplore.viz.html_map import generate_html_map
+
+                        generate_html_map(gdf, file)
                     case ".png" | ".jpg" | ".jpeg":
-                        if gdf.empty:
-                            print(f"No scenes found, skipping '{file}'")
-                            continue
-                        # Imported lazily: viz imports core, and pulls in heavy plotting libraries.
-                        from usgsxplore.viz import generate_scenes_footprint
+                        # Imported lazily: pulls in heavy plotting libraries.
+                        from usgsxplore.viz.scenes_footprint import generate_scenes_footprint
 
                         generate_scenes_footprint(gdf, file, _roi_source(vector_file, location, bbox), overwrite=True)
     except USGSInvalidDataset:

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import contextlib
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -17,7 +15,7 @@ from shapely.ops import unary_union
 from tqdm import tqdm
 
 from usgsxplore.core import download_browse_images
-from usgsxplore.utils import get_strip_id_from_entity_id
+from usgsxplore.utils import as_gdf, get_strip_id_from_entity_id
 
 WEB_MERCATOR_WORLD_EXTENT = 20037508.34
 # Half-width of the ROI-less context view, as a multiple of the strip's largest dimension.
@@ -40,8 +38,8 @@ def generate_strip_figures(
     `highlight_unavailable`, scenes whose `download_available` column is False are shaded
     in red. Strips that fail are reported as warnings without stopping the others.
     """
-    gdf = _as_gdf(source)
-    roi_gdf = _as_gdf(roi_source) if roi_source is not None else None
+    gdf = as_gdf(source)
+    roi_gdf = as_gdf(roi_source) if roi_source is not None else None
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -73,47 +71,6 @@ def generate_strip_figures(
                 future.result()
             except Exception as e:
                 tqdm.write(f"[WARN] {strip_id}: {e}")
-
-
-def generate_scenes_footprint(
-    source: str | Path | gpd.GeoDataFrame,
-    output_file: str | Path,
-    roi_source: str | Path | gpd.GeoDataFrame | None = None,
-    overwrite: bool = False,
-) -> None:
-    """Plot scene footprints over a satellite basemap, with the ROI outline if provided, as a PNG or JPG.
-
-    The parent directory of `output_file` must already exist. Raises ValueError if `source` is empty.
-    """
-    output_file = Path(output_file)
-    if output_file.suffix.lower() not in {".png", ".jpg", ".jpeg"}:
-        raise ValueError(f"Unsupported output format '{output_file.suffix}', expected .png or .jpg")
-    if not overwrite and output_file.exists():
-        return
-
-    gdf_3857 = _as_gdf(source).to_crs(epsg=3857)
-    if gdf_3857.empty:
-        raise ValueError("No scenes to plot")
-
-    fig, ax = plt.subplots(figsize=(10, 10))
-    gdf_3857.plot(ax=ax, color="yellow", alpha=0.2, zorder=1)
-    gdf_3857.boundary.plot(ax=ax, color="yellow", linewidth=0.5, zorder=2)
-    if roi_source is not None:
-        # Not `.boundary`: a point ROI has an empty boundary and would vanish.
-        _as_gdf(roi_source).to_crs(epsg=3857).plot(ax=ax, facecolor="none", edgecolor="red", linewidth=1.5, zorder=3)
-
-    ctx.add_basemap(ax, zorder=0, source=ctx.providers.Esri.WorldImagery, attribution=False)
-    ax.set_title(f"Scenes footprint ({len(gdf_3857)} scenes)", fontsize=13, fontweight="bold")
-    ax.axis("off")
-    fig.text(0.5, 0, "Basemap: Esri World Imagery", ha="center", va="top", fontsize=7, color="gray")
-
-    fig.savefig(output_file, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-
-
-#############################################################################################
-#                           HELPERS
-#############################################################################################
 
 
 def _generate_strip_figure(
@@ -183,11 +140,6 @@ def _generate_strip_figure(
             # work_dir is shared with other strips rendered in parallel, so only drop it once empty.
             with contextlib.suppress(OSError):
                 work_dir.rmdir()
-
-
-def _as_gdf(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Load a GeoDataFrame from a file path, or pass one through unchanged."""
-    return source if isinstance(source, gpd.GeoDataFrame) else gpd.read_file(source)
 
 
 def _fill_square_panel(ax):
