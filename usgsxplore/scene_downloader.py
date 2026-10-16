@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import datetime
 import gzip
+import logging
+import math
 import signal
 import sys
 import tarfile
@@ -36,6 +38,8 @@ import usgsxplore.errors as err
 
 if TYPE_CHECKING:
     from usgsxplore.api import API
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -86,7 +90,7 @@ class ProductSelector:
         """
         available = [o for o in options if o.get("available")]
         if not available:
-            raise err.DownloadOptionsError("No product available")
+            raise err.DownloadOptionsError(f"None of the {len(options)} requested scene(s) is available for download")
 
         # Use the first entity as reference to enumerate product variants
         ref_entity = available[0]["entityId"]
@@ -177,10 +181,12 @@ class LinkResolver:
                     n_missing = n_requested - n_failed - len(yielded_ids)
                     raise err.USGSError(f"{n_missing} download(s) not available after {self.max_retries} retries.")
                 n_pending = n_requested - n_failed - len(yielded_ids)
-                print(
-                    f"{n_pending} download(s) not yet available, "
-                    f"retrying in {self.retry_delay}s "
-                    f"({attempts + 1}/{self.max_retries})..."
+                logger.info(
+                    "%d download(s) not yet available, retrying in %ds (%d/%d)...",
+                    n_pending,
+                    self.retry_delay,
+                    attempts + 1,
+                    self.max_retries,
                 )
                 time.sleep(self.retry_delay)
                 attempts += 1
@@ -241,18 +247,6 @@ class FileDownloader:
 
         def _download_one(link: DownloadLink) -> Path | None:
             pos = position_pool.get()
-            bar = (
-                tqdm(
-                    total=link.filesize or None,
-                    position=pos,
-                    leave=False,
-                    desc=link.entity_id[:30],
-                    unit="B",
-                    unit_scale=True,
-                )
-                if self.show_progress
-                else None
-            )
             try:
                 with requests.get(link.url, stream=True, timeout=60) as r:
                     r.raise_for_status()
@@ -262,24 +256,28 @@ class FileDownloader:
                     filename = filename.replace(filename.split(".")[0], link.entity_id)
                     file_path = output_dir / filename
                     with open(file_path, "wb") as f:
-                        for chunk in r.iter_content(chunk_size=1024 * 1024):
+                        for chunk in tqdm(
+                            r.iter_content(chunk_size=2**20),
+                            total=math.ceil(link.filesize / 2**20) or None,
+                            position=pos,
+                            leave=False,
+                            desc=link.entity_id[:30],
+                            unit="MiB",
+                            disable=not self.show_progress,
+                        ):
                             if stop_event.is_set():
                                 file_path.unlink(missing_ok=True)
                                 return None
                             f.write(chunk)
-                            if bar:
-                                bar.update(len(chunk))
                 return file_path
             except Exception as e:
-                print(f"\nError downloading {link.entity_id}: {e}")
+                logger.error("Error downloading %s: %s", link.entity_id, e)
                 return None
             finally:
-                if bar:
-                    bar.close()
                 position_pool.put(pos)
 
         def _signal_handler(sig, frame):
-            print("\nDownload interrupted.")
+            logger.warning("Download interrupted.")
             stop_event.set()
             sys.exit(0)
 
@@ -323,32 +321,27 @@ class FileExtractor:
         if not files:
             return
 
-        def _extract_one(file_path: Path) -> str:
+        def _extract_one(file_path: Path) -> None:
             try:
                 if tarfile.is_tarfile(file_path):
                     with tarfile.open(file_path, "r:*") as tar:
                         tar.extractall(path=directory, filter="data")
-                    if remove_archive:
-                        file_path.unlink()
-                    return f"Extracted archive: {file_path.name}"
                 else:
                     out_path = file_path.with_suffix("")
                     with gzip.open(file_path, "rb") as f_in, open(out_path, "wb") as f_out:
                         copyfileobj(f_in, f_out)
-                    if remove_archive:
-                        file_path.unlink()
-                    return f"Extracted file: {file_path.name}"
+                if remove_archive:
+                    file_path.unlink()
+                logger.debug("Extracted %s", file_path.name)
             except Exception as e:
-                return f"Error extracting {file_path.name}: {e}"
+                logger.error("Error extracting %s: %s", file_path.name, e)
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {executor.submit(_extract_one, f): f for f in files}
-            if show_progress:
-                for _ in tqdm(as_completed(futures), total=len(futures), desc="Extracting", unit="file"):
-                    pass
-            else:
-                for _ in as_completed(futures):
-                    pass
+            for _ in tqdm(
+                as_completed(futures), total=len(futures), desc="Extracting", unit="file", disable=not show_progress
+            ):
+                pass
 
 
 class SceneDownloader:
@@ -408,26 +401,29 @@ class SceneDownloader:
 
         entity_ids = self._filter_existing(entity_ids, output_dir, overwrite)
         if not entity_ids:
+            logger.info("All scenes already present in %s, nothing to download (use overwrite to replace)", output_dir)
             return
 
         raw_options = self.api.request("download-options", {"datasetName": dataset, "entityIds": entity_ids})
         products = self.selector.select(raw_options, product_number)
 
         total_gb = sum(p.filesize for p in products) / 1e9
-        print(f"Product   : {products[0].product_name}")
-        print(f"Available : {len(products)} / {len(entity_ids)} scenes  ({total_gb:.1f} GB)")
+        logger.info("Product   : %s", products[0].product_name)
+        logger.info("Available : %d / %d scenes  (%.1f GB)", len(products), len(entity_ids), total_gb)
 
         output_dir.mkdir(parents=True, exist_ok=True)
 
         for batch in _iter_batches(products, batch_size):
             self._download_batch(batch, output_dir, extract)
 
+        logger.info("Saved to %s", output_dir.resolve())
+
     def remove_all_downloads(self) -> None:
         """Remove all active downloads from the USGS API."""
         download_search = self.api.request("download-search", {"activeOnly": True})
         if not download_search:
             return
-        print(f"Removing {len(download_search)} active download(s)...")
+        logger.info("Removing %d active download(s)...", len(download_search))
         for dl in download_search:
             self.api.request("download-remove", {"downloadId": dl["downloadId"]})
 
@@ -475,7 +471,7 @@ class SceneDownloader:
         filtered = [eid for eid in entity_ids if not any(n.startswith(eid) for n in existing)]
         skipped = len(entity_ids) - len(filtered)
         if skipped:
-            print(f"Skipping {skipped} scene(s) already present in {output_dir}")
+            logger.info("Skipping %d scene(s) already present in %s", skipped, output_dir)
         return filtered
 
 

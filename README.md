@@ -1,4 +1,9 @@
-[![Tests](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml/badge.svg)](https://github.com/adehecq/usgs_explorer/actions/workflows/python-tests.yml)
+[![PyPI](https://img.shields.io/pypi/v/usgsxplore)](https://pypi.org/project/usgsxplore/)
+[![Python](https://img.shields.io/pypi/pyversions/usgsxplore)](https://pypi.org/project/usgsxplore/)
+[![Downloads](https://static.pepy.tech/badge/usgsxplore)](https://pepy.tech/project/usgsxplore)
+[![Lint](https://github.com/adehecq/usgs_explorer/actions/workflows/lint.yml/badge.svg)](https://github.com/adehecq/usgs_explorer/actions/workflows/lint.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 # usgsxplore
 
@@ -44,8 +49,9 @@ export USGS_TOKEN=<your_token>
 # Search for Landsat scenes at a location between 2010 and 2020
 usgsxplore search landsat_tm_c2_l1 --location 5.7074 45.1611 --interval-date 2010-01-01 2020-01-01
 
-# Search for Hexagon KH-9 scenes and export to GeoPackage + HTML map
-usgsxplore search declassii --filter "camera=H" --output results.gpkg --output map.html
+# Search for Hexagon KH-9 scenes, export to GeoPackage and visualize them on an HTML map
+usgsxplore search declassii --filter "camera=H" --output results.gpkg
+usgsxplore viz map results.gpkg --output-file map.html
 
 # Download the first 10 results
 usgsxplore search landsat_tm_c2_l1 --limit 10 --output results.txt
@@ -63,6 +69,7 @@ Commands:
   search           Search scenes in a dataset
   download         Download scenes from a text file of entity IDs
   download-browse  Download individual browse (preview) images from a vector file
+  viz              Visualize scenes from a vector file (map, footprint, density, strip)
   info             List available datasets and metadata filters
 ```
 
@@ -84,6 +91,7 @@ usgsxplore search [OPTIONS] DATASET
 | `-i / --interval-date` | Date range: `YYYY-MM-DD YYYY-MM-DD` |
 | `-f / --filter` | Metadata filter string (see [Filter syntax](#filter-syntax)) |
 | `-m / --limit` | Max number of results (default: all) |
+| `--entity-ids-file` | Text file of entity IDs to fetch metadata for, instead of searching (other filters are ignored) |
 | `--pbar` | Show progress bar |
 
 **Output formats:**
@@ -93,12 +101,12 @@ usgsxplore search [OPTIONS] DATASET
 | `.txt` | Entity IDs, one per line — usable with `download` |
 | `.json` | Raw API response with full metadata |
 | `.gpkg` / `.shp` / `.geojson` | Vector file with scene footprints |
-| `.html` | Interactive map for quick visualization |
+| `.html` | **Deprecated**, will be removed in a future release — use `usgsxplore viz map` on a vector output instead |
 
 Multiple outputs can be specified simultaneously:
 
 ```bash
-usgsxplore search declassii --filter "camera=H" --output scenes.gpkg --output map.html
+usgsxplore search declassii --filter "camera=H" --output scenes.gpkg --output scenes.txt
 ```
 
 ### `download`
@@ -145,6 +153,44 @@ usgsxplore download-browse results.gpkg -o ./previews/
 
 # Download as JPEG
 usgsxplore download-browse results.gpkg -o ./previews/ --format jpg
+```
+
+### `viz`
+
+Visualize scenes from a vector file (produced by `search`).
+
+```bash
+usgsxplore viz COMMAND [OPTIONS] VECTOR_FILE
+```
+
+| Command | Output |
+|---------|--------|
+| `map` | Interactive HTML map, with the browse image in each popup (default: `scenes_map.html`) |
+| `footprint` | Scene footprints over a satellite basemap, as PNG/JPG (default: `scenes_footprint.png`) |
+| `density` | Scene overlap density over a satellite basemap, as PNG/JPG (default: `scenes_density.png`) |
+| `strip` | One `<strip_id>.jpg` per strip: browse-image mosaic next to a context map (default dir: `./strip_viz/`) |
+
+Options shared by every `viz` command:
+
+| Option | Description |
+|--------|-------------|
+| `-roi / --roi-vector-file` | Region Of Interest as a vector file, drawn in red |
+| `--roi-location` | ROI as a point: `longitude latitude` |
+| `--roi-bbox` | ROI as a bounding box: `xmin ymin xmax ymax` |
+| `--available-only` | Keep only scenes available for download |
+| `--overwrite` | Regenerate existing outputs |
+
+Only one ROI option can be given. `map`, `footprint` and `density` take `-o / --output-file`; `strip` takes `-o / --output-dir`, plus:
+
+| Option | Description |
+|--------|-------------|
+| `-m / --max-workers` | Strips rendered in parallel (default: 4) |
+| `--work-dir` | Where browse images are downloaded (default: `OUTPUT_DIR/browse_images`) |
+| `--clean / --no-clean` | Delete downloaded browse images once figures are saved (default: on) |
+
+```bash
+usgsxplore viz map results.gpkg -o map.html --roi-bbox 5.5 45 6 45.5
+usgsxplore viz strip results.gpkg -o ./strips/ -roi roi.geojson --no-clean
 ```
 
 ### `info`
@@ -213,14 +259,16 @@ from usgsxplore.core import (
 
 ```python
 # Print entity IDs to stdout
-search_scenes("landsat_tm_c2_l1",
+search_scenes(
+    "landsat_tm_c2_l1",
     location=(5.7074, 45.1611),
     interval_date=("2010-01-01", "2020-01-01"),
 )
 
 # Save to multiple formats
-search_scenes("declassii",
-    output_files=["results.gpkg", "map.html"],
+search_scenes(
+    "declassii",
+    output_files=["results.gpkg", "results.txt"],
     filter_str="camera=H",
     limit=500,
     show_progress=True,
@@ -236,7 +284,8 @@ search_scenes("declassii", username="myuser", token="mytoken", ...)
 ### Download
 
 ```python
-download_scenes("results.txt",
+download_scenes(
+    "results.txt",
     output_dir="./data",
     max_workers=8,
 )
@@ -256,6 +305,28 @@ from usgsxplore.browse import BrowseDownloader, TifSaveStrategy, JpgSaveStrategy
 
 downloader = BrowseDownloader("./previews", TifSaveStrategy(), max_workers=8)
 downloader.download("results.gpkg")
+```
+
+### Figures
+
+```python
+from usgsxplore.viz.html_map import generate_html_map
+from usgsxplore.viz.scenes_footprint import generate_scenes_footprint
+from usgsxplore.viz.strip_figures import generate_strip_figures
+
+# Interactive map of scene footprints, with browse images in popups
+generate_html_map("results.gpkg", "map.html")
+
+# One image of all scene footprints, with the ROI outlined (the output directory must exist)
+generate_scenes_footprint("results.gpkg", "footprint.png", roi="roi.geojson")
+
+# The ROI can also be a GeoDataFrame or a shapely geometry in longitude/latitude
+from shapely import box
+
+generate_scenes_footprint("results.gpkg", "footprint.png", roi=box(5.5, 45, 6, 45.5))
+
+# One figure per strip
+generate_strip_figures("results.gpkg", "./strips", roi="roi.geojson")
 ```
 
 ### Inspect datasets and filters

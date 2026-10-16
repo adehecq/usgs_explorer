@@ -198,7 +198,7 @@ class BrowseDownloader:
         self.max_workers = max_workers
         self.show_progress = show_progress
 
-    def download(self, source: str | Path | gpd.GeoDataFrame) -> None:
+    def download(self, source: str | Path | gpd.GeoDataFrame) -> list[Path]:
         """
         Download browse images for all scenes in `source`.
 
@@ -206,6 +206,12 @@ class BrowseDownloader:
         ----------
         source : str, Path, or GeoDataFrame
             Input vector file or GeoDataFrame with at least `url_key` and `name_key` columns.
+
+        Returns
+        -------
+        list[Path]
+            Paths of the available images (downloaded or already existing), in `source` order.
+            Scenes whose download failed are omitted.
         """
         if isinstance(source, (str, Path)):
             gdf = gpd.read_file(source)
@@ -214,30 +220,31 @@ class BrowseDownloader:
 
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
+        output_paths: list[Path] = []
+        failed: set[Path] = set()
         with requests.Session() as session, ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             futures: dict = {}
             for _, row in gdf.iterrows():
-                name = row[self.name_key]
-                output_path = self.output_dir / f"{name}.{self.strategy.extension}"
+                output_path = self.output_dir / f"{row[self.name_key]}.{self.strategy.extension}"
+                output_paths.append(output_path)
                 if output_path.exists() and not self.overwrite:
                     continue
                 fut = executor.submit(self._download_one, row.to_dict(), output_path, session)
-                futures[fut] = name
+                futures[fut] = output_path
 
-            if self.show_progress:
-                with tqdm(total=len(futures), desc="Downloading browse images") as pbar:
-                    for fut in as_completed(futures):
-                        try:
-                            fut.result()
-                        except Exception as e:
-                            print(f"Error for {futures[fut]}: {e}")
-                        pbar.update(1)
-            else:
-                for fut in as_completed(futures):
-                    try:
-                        fut.result()
-                    except Exception as e:
-                        print(f"Error for {futures[fut]}: {e}")
+            for fut in tqdm(
+                as_completed(futures),
+                total=len(futures),
+                desc="Downloading browse images",
+                disable=not self.show_progress,
+            ):
+                try:
+                    fut.result()
+                except Exception as e:
+                    failed.add(futures[fut])
+                    print(f"Error for {futures[fut].stem}: {e}")
+
+        return [p for p in output_paths if p not in failed]
 
     def _download_one(self, row: dict, output_path: Path, session: requests.Session) -> None:
         img = fetch_browse_img(row[self.url_key], grayscale=self.grayscale, session=session)

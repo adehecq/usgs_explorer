@@ -15,7 +15,14 @@ maintainers = [
     { name = "Amaury Dehecq", email = "this-is-not-an-email@a.com" },
 ]
 keywords = ["earth observation", "remote sesing", "GIS", "satellite imagery", "USGS", "M2M"]
-requires-python = ">=3.9"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+]
 dependencies = [
     "requests",
     "geopandas",
@@ -24,7 +31,9 @@ dependencies = [
     "click",
     "folium",
     "pillow",
-    "rasterio"
+    "rasterio",
+    "matplotlib",
+    "contextily"
 ]
 
 [project.urls]

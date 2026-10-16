@@ -7,7 +7,9 @@ Contains pure Python functions corresponding to the CLI commands.
 from __future__ import annotations
 
 import json
-import os
+import warnings
+from collections.abc import Sequence
+from pathlib import Path
 
 from usgsxplore import utils
 from usgsxplore.api import API
@@ -29,15 +31,15 @@ def search_scenes(
     dataset: str,
     username: str | None = None,
     token: str | None = None,
-    output_files: list[str] | None = None,
-    vector_file: str | None = None,
+    output_files: Sequence[str | Path] | None = None,
+    vector_file: str | Path | None = None,
     location: tuple[float, float] | None = None,
     bbox: tuple[float, float, float, float] | None = None,
     clouds: int | None = None,
     interval_date: tuple[str, str] | None = None,
     filter_str: str | None = None,
     limit: int | None = None,
-    entity_ids_file: str | None = None,
+    entity_ids_file: str | Path | None = None,
     show_progress: bool = False,
 ):
     """
@@ -47,7 +49,7 @@ def search_scenes(
     full metadata as JSON, when entity_ids_file is used). Otherwise, results are
     saved to the specified files. The output format is inferred from the file
     extension: .txt (entity IDs), .json (raw metadata), .gpkg/.geojson/.shp
-    (vector), .html (interactive map).
+    (vector), .html (interactive map, deprecated: use `usgsxplore.viz.html_map`).
 
     If entity_ids_file is provided, metadata is fetched for those entity IDs
     directly instead of running a filtered search, and all other filters are ignored.
@@ -61,7 +63,8 @@ def search_scenes(
     token : str, optional
         USGS M2M API token. Defaults to USGS_TOKEN env var.
     output_files : list[str] or None
-        Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp, .html.
+        Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp,
+        .html (deprecated).
     vector_file : str or None
         Path to a vector file used as spatial filter.
     location : tuple[float, float] or None
@@ -103,7 +106,9 @@ def search_scenes(
                     return
 
                 # determine metadata type
-                metadata_type = "summary" if len(output_files) == 1 and output_files[0].endswith(".txt") else "full"
+                metadata_type = (
+                    "summary" if len(output_files) == 1 and str(output_files[0]).endswith(".txt") else "full"
+                )
                 scenes = []
                 for batch in api.batch_search(dataset, scene_filter, limit, metadata_type, show_progress):
                     scenes += batch
@@ -112,25 +117,36 @@ def search_scenes(
                 print(json.dumps(scenes, indent=4))
                 return
 
-            for file in output_files:
-                directory = os.path.dirname(file)
-                if directory:
-                    os.makedirs(directory, exist_ok=True)
+            needs_gdf = any(Path(file).suffix not in {".txt", ".json"} for file in output_files)
+            gdf = utils.convert_response_to_gdf(scenes) if needs_gdf else None
 
-                if file.endswith(".txt"):
-                    with open(file, "w", encoding="utf-8") as f:
-                        f.write(f"#dataset={dataset}\n")
-                        for scene in scenes:
-                            f.write(scene["entityId"] + "\n")
-                elif file.endswith(".json"):
-                    with open(file, "w", encoding="utf-8") as f:
-                        json.dump(scenes, f, indent=4)
-                elif file.endswith((".gpkg", ".geojson", ".shp", ".html")):
-                    gdf = utils.convert_response_to_gdf(scenes)
-                    if file.endswith(".html"):
-                        utils.save_in_html(gdf, file)
-                    else:
+            for file in output_files:
+                Path(file).parent.mkdir(exist_ok=True, parents=True)
+
+                match Path(file).suffix:
+                    case ".txt":
+                        with open(file, "w", encoding="utf-8") as f:
+                            f.write(f"#dataset={dataset}\n")
+                            for scene in scenes:
+                                f.write(scene["entityId"] + "\n")
+                    case ".json":
+                        with open(file, "w", encoding="utf-8") as f:
+                            json.dump(scenes, f, indent=4)
+                    case ".gpkg" | ".geojson" | ".shp":
                         utils.save_in_gfile(gdf, file)
+                    case ".html":
+                        warnings.warn(
+                            "The .html output of search is deprecated and will be removed in a future release, "
+                            "save a vector file and use `usgsxplore viz map` instead.",
+                            FutureWarning,
+                            stacklevel=2,
+                        )
+                        if gdf.empty:
+                            print(f"No scenes found, skipping '{file}'")
+                            continue
+                        from usgsxplore.viz.html_map import generate_html_map
+
+                        generate_html_map(gdf, file, utils.roi_from_args(vector_file, location, bbox), overwrite=True)
     except USGSInvalidDataset:
         with API(username, token) as api:
             datasets = api.dataset_names()
@@ -199,7 +215,7 @@ def download_browse_images(
     max_workers: int = 4,
     overwrite: bool = False,
     show_progress: bool = True,
-) -> None:
+) -> list[Path]:
     """
     Download browse (preview) images from a vector file or GeoDataFrame.
 
@@ -219,6 +235,12 @@ def download_browse_images(
         If True, overwrite existing files.
     show_progress : bool, default True
         Whether to display a progress bar during download.
+
+    Returns
+    -------
+    list[Path]
+        Paths of the available images (downloaded or already existing), in `source` order.
+        Scenes whose download failed are omitted.
     """
     strategy = TifSaveStrategy() if fmt == "tif" else JpgSaveStrategy()
     downloader = BrowseDownloader(
@@ -228,7 +250,7 @@ def download_browse_images(
         max_workers=max_workers,
         show_progress=show_progress,
     )
-    downloader.download(source)
+    return downloader.download(source)
 
 
 def list_datasets(username: str | None = None, token: str | None = None, show_all: bool = False) -> list[str]:
