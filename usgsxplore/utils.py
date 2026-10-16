@@ -29,9 +29,8 @@ def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
     :return: GeoDataFrame to generate a geopackage
     """
     geometries = []
-    attributes = {}
+    rows = []
 
-    # loop in every line of the scenes file
     for scene in scenes_metadata:
         geom_type = scene["spatialCoverage"]["type"]
         if geom_type == "Polygon":
@@ -43,18 +42,13 @@ def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
         else:
             continue
 
-        # add all metadata attribute
-        for field in scene.get("metadata"):
-            field_name = _to_snake_case(field.get("fieldName"))
-            attributes.setdefault(field_name, []).append(field.get("value"))
+        # Scenes of the same dataset may not share the same metadata fields (e.g. Landsat collections),
+        # so build one row per scene and let pandas fill missing fields.
+        row = {_to_snake_case(field.get("fieldName")): field.get("value") for field in scene.get("metadata")}
+        row["browse_url"] = scene["browse"][0]["browsePath"] if scene["browse"] else None
+        rows.append(row)
 
-        if len(scene["browse"]) > 0:
-            attributes.setdefault("browse_url", []).append(scene["browse"][0]["browsePath"])
-        else:
-            attributes.setdefault("browse_url", []).append(None)
-
-    # create geodataframe with attributes and geometries
-    return gpd.GeoDataFrame(data=attributes, geometry=geometries, crs="EPSG:4326")
+    return gpd.GeoDataFrame(data=pd.DataFrame(rows), geometry=geometries, crs="EPSG:4326")
 
 
 RoiType = str | Path | gpd.GeoDataFrame | BaseGeometry
