@@ -55,10 +55,10 @@ class SaveStrategy(ABC):
 
 class TifSaveStrategy(SaveStrategy):
     """
-    Save a browse image as a georeferenced GeoTIFF using all four corner GCPs.
+    Save a browse image as a GeoTIFF georeferenced by its four corner GCPs.
 
-    The image is written in memory with the 4 GCPs, then warped to a rectilinear
-    grid via ``rasterio.warp.reproject``, properly handling non-rectangular scenes.
+    The image is not warped: GIS tools apply the GCPs on the fly, which handles
+    non-rectangular scenes.
 
     Requires the scene row to contain corner coordinate columns:
     ``nw/ne/se/sw_corner_long_dec`` and ``nw/ne/se/sw_corner_lat_dec``.
@@ -69,14 +69,14 @@ class TifSaveStrategy(SaveStrategy):
         CRS for the output raster. Defaults to EPSG:4326 (WGS84).
     **creation_opts
         Rasterio creation options. Override the defaults:
-        ``compress="jpeg", quality=60``.
+        ``compress="jpeg", jpeg_quality=60``.
     """
 
     extension = "tif"
 
     def __init__(self, crs: CRS | None = None, **creation_opts) -> None:
         self.crs = crs if crs is not None else CRS.from_epsg(4326)
-        self.creation_opts = {"compress": "jpeg", "quality": 60, **creation_opts}
+        self.creation_opts = {"compress": "jpeg", "jpeg_quality": 60, **creation_opts}
 
     def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
         if img.ndim == 2:

@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pytest
+import rasterio
 
 from usgsxplore import utils
 
@@ -39,6 +40,15 @@ def test_columns(search_dir: Path, common_columns: set[str], caplog: pytest.LogC
 def test_download_browse(invoke, search_dir: Path, tmp_path: Path) -> None:
     invoke("download-browse", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path), "--hide-pbar")
     assert sorted(p.stem for p in tmp_path.glob("*.tif")) == ENTITY_IDS
+    with rasterio.open(tmp_path / f"{ENTITY_IDS[0]}.tif") as src:
+        gcps, crs = src.gcps
+        assert len(gcps) == 4
+        assert crs is not None
+
+
+def test_download_browse_jpg(invoke, search_dir: Path, tmp_path: Path) -> None:
+    invoke("download-browse", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path), "-f", "jpg", "--hide-pbar")
+    assert sorted(p.stem for p in tmp_path.glob("*.jpg")) == ENTITY_IDS
 
 
 def test_strip_viz(invoke, search_dir: Path, tmp_path: Path) -> None:

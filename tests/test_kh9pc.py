@@ -1,4 +1,4 @@
-"""KH-9 Panoramic Camera (declassiii): search and viz strip."""
+"""KH-9 Panoramic Camera (declassiii): search, download-browse and viz strip."""
 
 from pathlib import Path
 
@@ -34,6 +34,11 @@ def test_columns(search_dir: Path, common_columns: set[str], caplog: pytest.LogC
     assert common_columns <= set(gdf.columns)
     utils.available_column(gdf)
     assert not caplog.records
+
+
+def test_download_browse(invoke, search_dir: Path, tmp_path: Path) -> None:
+    invoke("download-browse", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path), "--hide-pbar")
+    assert sorted(p.stem for p in tmp_path.glob("*.tif")) == ENTITY_IDS
 
 
 def test_strip_viz(invoke, search_dir: Path, tmp_path: Path) -> None:
