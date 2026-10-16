@@ -11,11 +11,11 @@ import rasterio
 from rasterio.merge import merge
 from rasterio.plot import plotting_extent
 from rasterio.vrt import WarpedVRT
-from shapely.ops import unary_union
 from tqdm import tqdm
 
 from usgsxplore.core import download_browse_images
-from usgsxplore.utils import RoiType, as_gdf, available_column, get_strip_id_from_entity_id
+from usgsxplore.utils import RoiType, as_gdf, get_strip_id_from_entity_id
+from usgsxplore.viz.scenes_footprint import plot_footprints
 
 WEB_MERCATOR_WORLD_EXTENT = 20037508.34
 # Half-width of the ROI-less context view, as a multiple of the strip's largest dimension.
@@ -28,15 +28,13 @@ def generate_strip_figures(
     roi: RoiType | None = None,
     max_workers: int = 4,
     overwrite: bool = False,
-    highlight_unavailable: bool = True,
     work_dir: str | Path | None = None,
     clean_work_dir: bool = True,
 ) -> None:
     """Generate one `<strip_id>.jpg` figure per strip in `source`, in parallel, under `output_dir`.
 
-    Each figure shows the browse-image mosaic of the strip next to a context map. If
-    `highlight_unavailable`, scenes not available for download are shaded
-    in red. Strips that fail are reported as warnings without stopping the others.
+    Each figure shows the browse-image mosaic of the strip next to a context map of the scene
+    footprints colored by availability. Strips that fail are reported as warnings without stopping the others.
     """
     gdf = as_gdf(source)
     roi_gdf = as_gdf(roi) if roi is not None else None
@@ -57,9 +55,7 @@ def generate_strip_figures(
             if not overwrite and output_file.exists():
                 continue
 
-            future = executor.submit(
-                _generate_strip_figure, sub_gdf, output_file, roi_gdf, highlight_unavailable, work_dir, clean_work_dir
-            )
+            future = executor.submit(_generate_strip_figure, sub_gdf, output_file, roi_gdf, work_dir, clean_work_dir)
             futures[future] = strip_id
 
         if len(futures) == 0:
@@ -77,7 +73,6 @@ def _generate_strip_figure(
     gdf: gpd.GeoDataFrame,
     output_file: str | Path,
     roi_gdf: gpd.GeoDataFrame | None = None,
-    highlight_unavailable: bool = True,
     work_dir: str | Path | None = None,
     clean_work_dir: bool = True,
 ) -> None:
@@ -108,9 +103,6 @@ def _generate_strip_figure(
 
         gdf_3857 = gdf.to_crs(epsg=3857)
         roi_3857 = roi_gdf.to_crs(epsg=3857) if roi_gdf is not None else None
-
-        if highlight_unavailable:
-            _highlight_unavailable_scenes(ax_zoom, gdf_3857)
 
         _fill_square_panel(ax_zoom)
         ctx.add_basemap(ax_zoom, zorder=0, source=ctx.providers.Esri.WorldImagery, attribution=False)
@@ -162,21 +154,6 @@ def _build_mosaic(raster_paths: list[Path]):
             ds.close()
 
 
-def _highlight_unavailable_scenes(ax, gdf_3857: gpd.GeoDataFrame):
-    """Overlay red semi-transparent polygons on scenes not available for download."""
-    covered = None
-    red_parts = []
-    for geom, available in zip(gdf_3857.geometry, available_column(gdf_3857)):
-        visible = geom if covered is None else geom.difference(covered)
-        if not available and not visible.is_empty:
-            red_parts.append(visible)
-        covered = geom if covered is None else covered.union(geom)
-    if red_parts:
-        gpd.GeoDataFrame(geometry=[unary_union(red_parts)], crs="EPSG:3857").plot(
-            ax=ax, color="red", alpha=0.2, zorder=2
-        )
-
-
 def _compute_coverage(gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame) -> float:
     """Return the percentage of the ROI area covered by the strip footprint."""
     roi_geom = roi_3857.union_all()
@@ -189,13 +166,9 @@ def _plot_context(ax, gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame | N
 
     When no ROI is given, the view is a square region centered on the strip instead.
     """
-    strip_union = gpd.GeoDataFrame(geometry=[gdf_3857.union_all()], crs="EPSG:3857")
-    if roi_3857 is not None:
-        roi_3857.boundary.plot(ax=ax, color="red", linewidth=1, zorder=1)
-    strip_union.plot(ax=ax, color="yellow", alpha=0.4, zorder=2)
-    strip_union.boundary.plot(ax=ax, color="yellow", linewidth=1.5, zorder=3)
+    plot_footprints(ax, gdf_3857, roi_3857)
     if roi_3857 is None:
-        minx, miny, maxx, maxy = strip_union.total_bounds
+        minx, miny, maxx, maxy = gdf_3857.total_bounds
         cx, cy = (minx + maxx) / 2, (miny + maxy) / 2
         half = CONTEXT_ZOOM_FACTOR * max(maxx - minx, maxy - miny)
         # Tiles do not exist beyond the Web Mercator bounds, which high-latitude strips would exceed.
