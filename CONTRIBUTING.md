@@ -28,22 +28,17 @@ If you use VSCode, you can add the following to your `.vscode/settings.json` to 
 
 The line length is set to 120 characters via `[tool.ruff]` in `pyproject.toml`.
 
-Before committing make sure to passed all tests:
+## Before committing
+
+Make sure the linter and all tests pass:
 ```bash
+hatch run dev:ruff check .
+hatch run dev:ruff format .
+
+# tests run against the real USGS API and are skipped without credentials
+export USGS_USERNAME=<your_username>
+export USGS_TOKEN=<your_token>
 hatch run dev:pytest
 ```
 
-You can also run the notebooks : [download.ipynb](./examples/download.ipynb)
-
-## Examples of commands
-```bash
-
-usgsxplore search aerial_combin --bbox -111.87783 32.66157 -111.60280 32.89378 -i 1977-10-14 1977-10-14 -f "IMAGE_TYPE=13" -o data/1977_10_14/1977_10_14_aerial.gpkg -o data/1977_10_14/1977_10_14_aerial.html -o data/1977_10_14/1977_10_14_aerial.txt
-
-usgsxplore search aerial_combin --bbox -111.87783 32.66157 -111.60280 32.89378 -i 1978-09-06 1978-09-06 -o data/1978_09_06/1978_09_06_aerial.gpkg -o data/1978_09_06/1978_09_06_aerial.html -o data/1978_09_06/1978_09_06_aerial.txt
-
-usgsxplore search aerial_combin --bbox -111.87783 32.66157 -111.60280 32.89378 -i 1976-04-01 1976-04-01 -o data/1976_04_01/1976_04_01_aerial.gpkg -o data/1976_04_01/1976_04_01_aerial.html -o data/1976_04_01/1976_04_01_aerial.txt
-
-
-
-```
+The pre-commit hooks also run `ruff --fix` and `ruff format` on staged files.

@@ -79,6 +79,20 @@ def is_vector_file(ctx: click.Context, param: click.Parameter, value: str | None
     return value
 
 
+def is_image_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    "callback for verify the validity of the output image file"
+    if not value.lower().endswith((".png", ".jpg", ".jpeg")):
+        raise click.BadParameter(f"'{value}' must be an image file (.png, .jpg)", ctx=ctx, param=param)
+    return value
+
+
+def is_html_file(ctx: click.Context, param: click.Parameter, value: str) -> str:
+    "callback for verify the validity of the output html file"
+    if not value.lower().endswith(".html"):
+        raise click.BadParameter(f"'{value}' must be an html file", ctx=ctx, param=param)
+    return value
+
+
 # ----------------------------------------------------------------------------------------------------
 # 									COMMAND LINE INTERFACE
 # ----------------------------------------------------------------------------------------------------
@@ -411,6 +425,7 @@ def strip_viz(
     type=click.Path(file_okay=True),
     default="scenes_footprint.png",
     show_default=True,
+    callback=is_image_file,
     help="Output file for the visualization.",
 )
 @roi_options
@@ -437,6 +452,7 @@ def footprint_viz(
     type=click.Path(file_okay=True),
     default="scenes_density.png",
     show_default=True,
+    callback=is_image_file,
     help="Output file for the visualization.",
 )
 @roi_options
@@ -463,6 +479,7 @@ def density_viz(
     type=click.Path(file_okay=True),
     default="scenes_map.html",
     show_default=True,
+    callback=is_html_file,
     help="Output file for the visualization.",
 )
 @roi_options

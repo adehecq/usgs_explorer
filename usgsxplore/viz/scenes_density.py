@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from affine import Affine
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from rasterio.enums import MergeAlg
 from rasterio.features import rasterize
 from rasterio.plot import plotting_extent
@@ -41,16 +42,7 @@ def generate_scenes_density(
 
     density, transform = rasterize_density(gdf_3857, resolution)
 
-    if date_column not in gdf_3857.columns:
-        fig, ax = plt.subplots(figsize=(10, 10))
-    else:
-        fig, (ax, ax_time) = plt.subplots(2, 1, figsize=(10, 12), height_ratios=[5, 1])
-        dates = pd.to_datetime(gdf_3857[date_column], errors="coerce").dropna()
-        ax_time.hist(dates, bins=50, color="tab:blue")
-        ax_time.set_title("Temporal coverage", fontsize=11)
-        ax_time.set_ylabel("Scenes")
-        ax_time.spines[["top", "right"]].set_visible(False)
-
+    fig, ax = plt.subplots(figsize=(10, 10))
     im = ax.imshow(
         np.ma.masked_equal(density, 0),
         cmap="viridis",
@@ -59,7 +51,18 @@ def generate_scenes_density(
         interpolation="nearest",
         zorder=1,
     )
-    fig.colorbar(im, ax=ax, label="Overlapping scenes", shrink=0.6)
+    # The equal-aspect map rarely fills its axes; a divider attaches the side panels to the drawn map,
+    # so they match its size and leave no gap.
+    divider = make_axes_locatable(ax)
+    fig.colorbar(im, cax=divider.append_axes("right", size=0.25, pad=0.15), label="Overlapping scenes")
+
+    if date_column in gdf_3857.columns:
+        ax_time = divider.append_axes("bottom", size=1.8, pad=0.6)
+        dates = pd.to_datetime(gdf_3857[date_column], errors="coerce").dropna()
+        ax_time.hist(dates, bins=50, color="tab:blue")
+        ax_time.set_title("Temporal coverage", fontsize=11)
+        ax_time.set_ylabel("Scenes")
+        ax_time.spines[["top", "right"]].set_visible(False)
     if roi is not None:
         # Not `.boundary`: a point ROI has an empty boundary and would vanish.
         as_gdf(roi).to_crs(epsg=3857).plot(ax=ax, facecolor="none", edgecolor="red", linewidth=1.5, zorder=2)
@@ -67,7 +70,16 @@ def generate_scenes_density(
     ctx.add_basemap(ax, zorder=0, source=ctx.providers.Esri.WorldImagery, attribution=False)
     ax.set_title(f"Scenes density ({len(gdf_3857)} scenes)", fontsize=13, fontweight="bold")
     ax.axis("off")
-    fig.text(0.5, 0, "Basemap: Esri World Imagery", ha="center", va="top", fontsize=7, color="gray")
+    ax.text(
+        0.5,
+        -0.01,
+        "Basemap: Esri World Imagery",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=7,
+        color="gray",
+    )
 
     fig.savefig(output_file, dpi=150, bbox_inches="tight")
     plt.close(fig)

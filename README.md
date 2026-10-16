@@ -259,13 +259,15 @@ from usgsxplore.core import (
 
 ```python
 # Print entity IDs to stdout
-search_scenes("landsat_tm_c2_l1",
+search_scenes(
+    "landsat_tm_c2_l1",
     location=(5.7074, 45.1611),
     interval_date=("2010-01-01", "2020-01-01"),
 )
 
 # Save to multiple formats
-search_scenes("declassii",
+search_scenes(
+    "declassii",
     output_files=["results.gpkg", "results.txt"],
     filter_str="camera=H",
     limit=500,
@@ -282,7 +284,8 @@ search_scenes("declassii", username="myuser", token="mytoken", ...)
 ### Download
 
 ```python
-download_scenes("results.txt",
+download_scenes(
+    "results.txt",
     output_dir="./data",
     max_workers=8,
 )
@@ -319,6 +322,7 @@ generate_scenes_footprint("results.gpkg", "footprint.png", roi="roi.geojson")
 
 # The ROI can also be a GeoDataFrame or a shapely geometry in longitude/latitude
 from shapely import box
+
 generate_scenes_footprint("results.gpkg", "footprint.png", roi=box(5.5, 45, 6, 45.5))
 
 # One figure per strip

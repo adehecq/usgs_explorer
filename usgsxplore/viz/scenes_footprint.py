@@ -37,7 +37,17 @@ def generate_scenes_footprint(
     ctx.add_basemap(ax, zorder=0, source=ctx.providers.Esri.WorldImagery, attribution=False)
     ax.set_title(f"Scenes footprint ({len(gdf_3857)} scenes)", fontsize=13, fontweight="bold")
     ax.axis("off")
-    fig.text(0.5, 0, "Basemap: Esri World Imagery", ha="center", va="top", fontsize=7, color="gray")
+    # Anchored to the map, not the figure: the map rarely fills the square figure and tight cropping stops at text.
+    ax.text(
+        0.5,
+        -0.01,
+        "Basemap: Esri World Imagery",
+        transform=ax.transAxes,
+        ha="center",
+        va="top",
+        fontsize=7,
+        color="gray",
+    )
 
     fig.savefig(output_file, dpi=150, bbox_inches="tight")
     plt.close(fig)
