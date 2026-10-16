@@ -193,6 +193,8 @@ usgsxplore viz map results.gpkg -o map.html --roi-bbox 5.5 45 6 45.5
 usgsxplore viz strip results.gpkg -o ./strips/ -roi roi.geojson --no-clean
 ```
 
+See [docs/figures.md](docs/figures.md) for example outputs.
+
 ### `info`
 
 ```bash
@@ -311,6 +313,7 @@ downloader.download("results.gpkg")
 
 ```python
 from usgsxplore.viz.html_map import generate_html_map
+from usgsxplore.viz.scenes_density import generate_scenes_density
 from usgsxplore.viz.scenes_footprint import generate_scenes_footprint
 from usgsxplore.viz.strip_figures import generate_strip_figures
 
@@ -324,6 +327,9 @@ generate_scenes_footprint("results.gpkg", "footprint.png", roi="roi.geojson")
 from shapely import box
 
 generate_scenes_footprint("results.gpkg", "footprint.png", roi=box(5.5, 45, 6, 45.5))
+
+# Scene overlap density, with a 1 km pixel size (in Web Mercator meters)
+generate_scenes_density("results.gpkg", "density.png", roi="roi.geojson", resolution=1000)
 
 # One figure per strip
 generate_strip_figures("results.gpkg", "./strips", roi="roi.geojson")
