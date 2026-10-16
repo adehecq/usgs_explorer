@@ -7,11 +7,11 @@ Author: Luc Godin
 
 from __future__ import annotations
 
+import logging
 import re
 import warnings
 from difflib import SequenceMatcher
 from pathlib import Path
-import logging
 
 import geopandas as gpd
 import pandas as pd
