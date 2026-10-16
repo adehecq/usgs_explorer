@@ -29,6 +29,13 @@ def test_search(search_dir: Path) -> None:
     assert list(gpd.read_file(search_dir / "scenes.gpkg")["entity_id"]) == [ENTITY_ID]
 
 
+def test_columns(search_dir: Path, common_columns: set[str], caplog: pytest.LogCaptureFixture) -> None:
+    gdf = gpd.read_file(search_dir / "scenes.gpkg")
+    assert common_columns <= set(gdf.columns)
+    utils.available_column(gdf)
+    assert not caplog.records
+
+
 def test_download(invoke, search_dir: Path, tmp_path: Path) -> None:
     # Product 0 is the medium resolution scan (~10 MB), much lighter than the high resolution one
     invoke("download", str(search_dir / "scenes.txt"), "-o", str(tmp_path), "-p", "0", "--hide-pbar")

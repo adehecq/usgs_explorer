@@ -9,9 +9,11 @@ Author: Luc Godin
 
 from __future__ import annotations
 
+import functools
 import logging
 
 import click
+import geopandas as gpd
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from usgsxplore import utils
@@ -28,7 +30,7 @@ def is_valid_output_format(ctx: click.Context, param: click.Parameter, value: tu
     """
     Callback use to check the format of the output file of the search command.
     """
-    formats = (".txt", ".json", ".gpkg", ".shp", ".geojson", ".html", ".png", ".jpg", ".jpeg")
+    formats = (".txt", ".json", ".gpkg", ".shp", ".geojson", ".html")
     for filename in value:
         if not filename.endswith(formats):
             choices = " | ".join(formats)
@@ -100,7 +102,7 @@ def cli() -> None:
     "--output",
     type=click.Path(file_okay=True),
     multiple=True,
-    help="Output file : (txt, json, html, gpkg, shp, geojson, png, jpg, jpeg)",
+    help="Output file : (txt, json, gpkg, shp, geojson, html [deprecated, use `viz map`])",
     callback=is_valid_output_format,
 )
 @click.option(
@@ -295,8 +297,52 @@ def download_browse(
     )
 
 
-@click.command("strip-viz")
-@click.argument("vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file)
+# ARGS and OPTIONS for every viz
+
+vector_file_arg = click.argument("vector-file", type=click.Path(exists=True, file_okay=True), callback=is_vector_file)
+
+
+def roi_options(func):
+    """Add the ROI options to a viz command and merge them into a single `roi` argument."""
+
+    @click.option(
+        "--roi-vector-file",
+        "-roi",
+        type=click.Path(exists=True, file_okay=True),
+        callback=is_vector_file,
+        help="Region Of Interest (ROI) as a vector file, drawn in red on the figure.",
+    )
+    @click.option("--roi-location", type=click.FLOAT, nargs=2, help="ROI as a point (longitude, latitude).")
+    @click.option("--roi-bbox", type=click.FLOAT, nargs=4, help="ROI as a bounding box (xmin, ymin, xmax, ymax).")
+    @functools.wraps(func)
+    def wrapper(*args, roi_vector_file, roi_location, roi_bbox, **kwargs):
+        """Merge the ROI options into `roi` and call the wrapped command."""
+        if sum(map(bool, (roi_vector_file, roi_location, roi_bbox))) > 1:
+            raise click.UsageError("Use only one of --roi-vector-file, --roi-location and --roi-bbox.")
+        return func(*args, roi=utils.roi_from_args(roi_vector_file, roi_location, roi_bbox), **kwargs)
+
+    return wrapper
+
+
+overwrite_option = click.option(
+    "--overwrite", is_flag=True, default=False, help="Regenerate figures that already exist."
+)
+
+available_only_option = click.option(
+    "--available-only", is_flag=True, default=False, help="Filter only available scenes"
+)
+
+
+def load_scenes(vector_file: str, available_only: bool) -> gpd.GeoDataFrame:
+    """Load the scenes of a viz command, optionally keeping only the available ones."""
+    gdf = utils.filter_only_available(vector_file) if available_only else utils.as_gdf(vector_file)
+    if gdf.empty:
+        raise click.UsageError("No scenes to visualize" + (" after --available-only" if available_only else ""))
+    return gdf
+
+
+@click.command("strip")
+@vector_file_arg
 @click.option(
     "--output-dir",
     "-o",
@@ -305,14 +351,7 @@ def download_browse(
     show_default=True,
     help="Output directory for the strip figures.",
 )
-@click.option(
-    "--roi-vector-file",
-    "-roi",
-    type=click.Path(exists=True, file_okay=True),
-    callback=is_vector_file,
-    help="Vector file of the Region Of Interest (ROI). When given, it is drawn on the context panel "
-    "and the ROI coverage of each strip is shown in the title.",
-)
+@roi_options
 @click.option(
     "--max-workers",
     "-m",
@@ -321,14 +360,8 @@ def download_browse(
     show_default=True,
     help="Number of strips rendered in parallel (one process each).",
 )
-@click.option("--overwrite", is_flag=True, default=False, help="Regenerate figures that already exist.")
-@click.option(
-    "--highlight-unavailable/--no-highlight-unavailable",
-    default=True,
-    show_default=True,
-    help="Shade in red the scenes that are not available for download "
-    "(requires a 'download_available' column in the vector file).",
-)
+@overwrite_option
+@available_only_option
 @click.option(
     "--work-dir",
     type=click.Path(dir_okay=True, resolve_path=True),
@@ -343,10 +376,10 @@ def download_browse(
 def strip_viz(
     vector_file: str,
     output_dir: str,
-    roi_vector_file: str | None,
+    roi: utils.RoiType | None,
     max_workers: int,
     overwrite: bool,
-    highlight_unavailable: bool,
+    available_only: bool,
     work_dir: str | None,
     clean: bool,
 ) -> None:
@@ -360,15 +393,97 @@ def strip_viz(
     from usgsxplore.viz.strip_figures import generate_strip_figures
 
     generate_strip_figures(
-        vector_file,
+        load_scenes(vector_file, available_only),
         output_dir,
-        roi_vector_file,
+        roi,
         max_workers=max_workers,
         overwrite=overwrite,
-        highlight_unavailable=highlight_unavailable,
         work_dir=work_dir,
         clean_work_dir=clean,
     )
+
+
+@click.command("footprint")
+@vector_file_arg
+@click.option(
+    "--output-file",
+    "-o",
+    type=click.Path(file_okay=True),
+    default="scenes_footprint.png",
+    show_default=True,
+    help="Output file for the visualization.",
+)
+@roi_options
+@overwrite_option
+@available_only_option
+def footprint_viz(
+    vector_file: str,
+    output_file: str,
+    roi: utils.RoiType | None,
+    overwrite: bool,
+    available_only: bool,
+) -> None:
+    """Plot the scene footprints over a satellite basemap, as a PNG or JPG."""
+    from usgsxplore.viz.scenes_footprint import generate_scenes_footprint
+
+    generate_scenes_footprint(load_scenes(vector_file, available_only), output_file, roi, overwrite)
+
+
+@click.command("density")
+@vector_file_arg
+@click.option(
+    "--output-file",
+    "-o",
+    type=click.Path(file_okay=True),
+    default="scenes_density.png",
+    show_default=True,
+    help="Output file for the visualization.",
+)
+@roi_options
+@overwrite_option
+@available_only_option
+def density_viz(
+    vector_file: str,
+    output_file: str,
+    roi: utils.RoiType | None,
+    overwrite: bool,
+    available_only: bool,
+) -> None:
+    """Plot the scene overlap density over a satellite basemap, as a PNG or JPG."""
+    from usgsxplore.viz.scenes_density import generate_scenes_density
+
+    generate_scenes_density(load_scenes(vector_file, available_only), output_file, roi, overwrite=overwrite)
+
+
+@click.command("map")
+@vector_file_arg
+@click.option(
+    "--output-file",
+    "-o",
+    type=click.Path(file_okay=True),
+    default="scenes_map.html",
+    show_default=True,
+    help="Output file for the visualization.",
+)
+@roi_options
+@overwrite_option
+@available_only_option
+def map_viz(
+    vector_file: str,
+    output_file: str,
+    roi: utils.RoiType | None,
+    overwrite: bool,
+    available_only: bool,
+) -> None:
+    """Save the scene footprints as an interactive HTML map, with browse images in popups."""
+    from usgsxplore.viz.html_map import generate_html_map
+
+    generate_html_map(load_scenes(vector_file, available_only), output_file, roi, overwrite=overwrite)
+
+
+@click.group()
+def viz() -> None:
+    """Create some visualization"""
 
 
 @click.group()
@@ -402,7 +517,7 @@ def filters(dataset: str) -> None:
     api = API()
     dataset_filters = api.dataset_filters(dataset)
     table = [["field id", "field lbl", "field sql"]]
-    for _i, filt in enumerate(dataset_filters):
+    for filt in dataset_filters:
         table.append(
             [
                 filt["id"],
@@ -419,9 +534,13 @@ cli.add_command(search)
 cli.add_command(download)
 cli.add_command(download_browse)
 cli.add_command(info)
-cli.add_command(strip_viz)
+cli.add_command(viz)
 info.add_command(dataset)
 info.add_command(filters)
+viz.add_command(strip_viz)
+viz.add_command(footprint_viz)
+viz.add_command(density_viz)
+viz.add_command(map_viz)
 
 
 if __name__ == "__main__":

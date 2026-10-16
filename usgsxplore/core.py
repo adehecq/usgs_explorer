@@ -7,11 +7,9 @@ Contains pure Python functions corresponding to the CLI commands.
 from __future__ import annotations
 
 import json
+import warnings
 from collections.abc import Sequence
 from pathlib import Path
-
-import geopandas as gpd
-from shapely.geometry import Point, box
 
 from usgsxplore import utils
 from usgsxplore.api import API
@@ -51,8 +49,7 @@ def search_scenes(
     full metadata as JSON, when entity_ids_file is used). Otherwise, results are
     saved to the specified files. The output format is inferred from the file
     extension: .txt (entity IDs), .json (raw metadata), .gpkg/.geojson/.shp
-    (vector), .html (interactive map), .png/.jpg/.jpeg (footprint image over a
-    satellite basemap, with the spatial filter outlined; skipped when no scene is found).
+    (vector), .html (interactive map, deprecated: use `usgsxplore.viz.html_map`).
 
     If entity_ids_file is provided, metadata is fetched for those entity IDs
     directly instead of running a filtered search, and all other filters are ignored.
@@ -66,8 +63,8 @@ def search_scenes(
     token : str, optional
         USGS M2M API token. Defaults to USGS_TOKEN env var.
     output_files : list[str] or None
-        Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp, .html,
-        .png, .jpg, .jpeg.
+        Paths to output files. Supported extensions: .txt, .json, .gpkg, .geojson, .shp,
+        .html (deprecated).
     vector_file : str or None
         Path to a vector file used as spatial filter.
     location : tuple[float, float] or None
@@ -137,17 +134,19 @@ def search_scenes(
                             json.dump(scenes, f, indent=4)
                     case ".gpkg" | ".geojson" | ".shp":
                         utils.save_in_gfile(gdf, file)
-                    case ".html" | ".png" | ".jpg" | ".jpeg" if gdf.empty:
-                        print(f"No scenes found, skipping '{file}'")
                     case ".html":
+                        warnings.warn(
+                            "The .html output of search is deprecated and will be removed in a future release, "
+                            "save a vector file and use `usgsxplore viz map` instead.",
+                            FutureWarning,
+                            stacklevel=2,
+                        )
+                        if gdf.empty:
+                            print(f"No scenes found, skipping '{file}'")
+                            continue
                         from usgsxplore.viz.html_map import generate_html_map
 
-                        generate_html_map(gdf, file)
-                    case ".png" | ".jpg" | ".jpeg":
-                        # Imported lazily: pulls in heavy plotting libraries.
-                        from usgsxplore.viz.scenes_footprint import generate_scenes_footprint
-
-                        generate_scenes_footprint(gdf, file, _roi_source(vector_file, location, bbox), overwrite=True)
+                        generate_html_map(gdf, file, utils.roi_from_args(vector_file, location, bbox), overwrite=True)
     except USGSInvalidDataset:
         with API(username, token) as api:
             datasets = api.dataset_names()
@@ -156,21 +155,6 @@ def search_scenes(
         print(f"Invalid dataset : '{dataset}', it must be in :\n {choices}")
     except (FilterValueError, FilterFieldError) as e:
         print(e.__class__.__name__, " : ", e)
-
-
-def _roi_source(
-    vector_file: str | Path | None,
-    location: tuple[float, float] | None,
-    bbox: tuple[float, float, float, float] | None,
-) -> str | Path | gpd.GeoDataFrame | None:
-    """Return the spatial filter as a drawable ROI, with the same precedence as `SceneFilter.from_args`."""
-    if vector_file:
-        return vector_file
-    if location:
-        return gpd.GeoDataFrame(geometry=[Point(*location)], crs="EPSG:4326")
-    if bbox:
-        return gpd.GeoDataFrame(geometry=[box(*bbox)], crs="EPSG:4326")
-    return None
 
 
 def download_scenes(

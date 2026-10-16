@@ -11,9 +11,14 @@ import re
 import warnings
 from difflib import SequenceMatcher
 from pathlib import Path
+import logging
 
 import geopandas as gpd
-from shapely import MultiPolygon, Point, Polygon
+import pandas as pd
+from shapely import MultiPolygon, Point, Polygon, box
+from shapely.geometry.base import BaseGeometry
+
+logger = logging.getLogger(__name__)
 
 
 def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
@@ -52,9 +57,55 @@ def convert_response_to_gdf(scenes_metadata: list[dict]) -> gpd.GeoDataFrame:
     return gpd.GeoDataFrame(data=attributes, geometry=geometries, crs="EPSG:4326")
 
 
-def as_gdf(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-    """Load a GeoDataFrame from a file path, or pass one through unchanged."""
-    return source if isinstance(source, gpd.GeoDataFrame) else gpd.read_file(source)
+RoiType = str | Path | gpd.GeoDataFrame | BaseGeometry
+
+
+def as_gdf(source: RoiType) -> gpd.GeoDataFrame:
+    """Load a GeoDataFrame from a file path or a lon/lat geometry, or pass one through unchanged."""
+    match source:
+        case gpd.GeoDataFrame():
+            return source
+        case BaseGeometry():
+            return gpd.GeoDataFrame(geometry=[source], crs="EPSG:4326")
+        case _:
+            return gpd.read_file(source)
+
+
+def roi_from_args(
+    vector_file: str | Path | None = None,
+    location: tuple[float, float] | None = None,
+    bbox: tuple[float, float, float, float] | None = None,
+) -> RoiType | None:
+    """Combine the spatial inputs into a single ROI, with the same precedence as `SceneFilter.from_args`."""
+    if vector_file:
+        return vector_file
+    if location:
+        return Point(*location)
+    if bbox:
+        return box(*bbox)
+    return None
+
+
+AVAILABLE_COLNAMES = {"download_available", "down_load_available", "high_resolution_download_avail"}
+
+
+def available_column(source: str | Path | gpd.GeoDataFrame) -> pd.Series:
+    """Return the download availability of each scene as a bool Series, all True if no availability column exists."""
+    gdf = as_gdf(source)
+
+    column = next((gdf[col] for col in AVAILABLE_COLNAMES if col in gdf.columns), None)
+
+    if column is None:
+        logger.warning("No download availability column found among: %s", ", ".join(gdf.columns))
+        return pd.Series(True, index=gdf.index)
+
+    # Formats without a native bool type may read the flag back as 0/1
+    return column.astype(bool)
+
+
+def filter_only_available(source: str | Path | gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    gdf = as_gdf(source)
+    return gdf[available_column(gdf)]
 
 
 def save_in_gfile(gdf: gpd.GeoDataFrame, vector_file: str = "scenes.gpkg") -> None:

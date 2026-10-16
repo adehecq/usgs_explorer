@@ -15,7 +15,7 @@ from shapely.ops import unary_union
 from tqdm import tqdm
 
 from usgsxplore.core import download_browse_images
-from usgsxplore.utils import as_gdf, get_strip_id_from_entity_id
+from usgsxplore.utils import RoiType, as_gdf, available_column, get_strip_id_from_entity_id
 
 WEB_MERCATOR_WORLD_EXTENT = 20037508.34
 # Half-width of the ROI-less context view, as a multiple of the strip's largest dimension.
@@ -25,7 +25,7 @@ CONTEXT_ZOOM_FACTOR = 3
 def generate_strip_figures(
     source: str | Path | gpd.GeoDataFrame,
     output_dir: str | Path,
-    roi_source: str | Path | gpd.GeoDataFrame | None = None,
+    roi: RoiType | None = None,
     max_workers: int = 4,
     overwrite: bool = False,
     highlight_unavailable: bool = True,
@@ -35,11 +35,11 @@ def generate_strip_figures(
     """Generate one `<strip_id>.jpg` figure per strip in `source`, in parallel, under `output_dir`.
 
     Each figure shows the browse-image mosaic of the strip next to a context map. If
-    `highlight_unavailable`, scenes whose `download_available` column is False are shaded
+    `highlight_unavailable`, scenes not available for download are shaded
     in red. Strips that fail are reported as warnings without stopping the others.
     """
     gdf = as_gdf(source)
-    roi_gdf = as_gdf(roi_source) if roi_source is not None else None
+    roi_gdf = as_gdf(roi) if roi is not None else None
 
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -163,15 +163,12 @@ def _build_mosaic(raster_paths: list[Path]):
 
 
 def _highlight_unavailable_scenes(ax, gdf_3857: gpd.GeoDataFrame):
-    """Overlay red semi-transparent polygons on scenes where download_available is False."""
-    if "download_available" not in gdf_3857.columns:
-        return
+    """Overlay red semi-transparent polygons on scenes not available for download."""
     covered = None
     red_parts = []
-    for row in gdf_3857.itertuples():
-        geom = row.geometry
+    for geom, available in zip(gdf_3857.geometry, available_column(gdf_3857)):
         visible = geom if covered is None else geom.difference(covered)
-        if not row.download_available and not visible.is_empty:
+        if not available and not visible.is_empty:
             red_parts.append(visible)
         covered = geom if covered is None else covered.union(geom)
     if red_parts:

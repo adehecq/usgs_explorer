@@ -1,4 +1,4 @@
-"""KH-9 Mapping Camera (declassii): search, download-browse and strip-viz."""
+"""KH-9 Mapping Camera (declassii): search, download-browse and viz strip."""
 
 from pathlib import Path
 
@@ -29,11 +29,18 @@ def test_search(search_dir: Path) -> None:
     assert sorted(gpd.read_file(search_dir / "scenes.gpkg")["entity_id"]) == ENTITY_IDS
 
 
+def test_columns(search_dir: Path, common_columns: set[str], caplog: pytest.LogCaptureFixture) -> None:
+    gdf = gpd.read_file(search_dir / "scenes.gpkg")
+    assert common_columns <= set(gdf.columns)
+    utils.available_column(gdf)
+    assert not caplog.records
+
+
 def test_download_browse(invoke, search_dir: Path, tmp_path: Path) -> None:
     invoke("download-browse", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path), "--hide-pbar")
     assert sorted(p.stem for p in tmp_path.glob("*.tif")) == ENTITY_IDS
 
 
 def test_strip_viz(invoke, search_dir: Path, tmp_path: Path) -> None:
-    invoke("strip-viz", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path))
+    invoke("viz", "strip", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path))
     assert [p.name for p in tmp_path.glob("*.jpg")] == ["DZB1212-500245L.jpg"]
