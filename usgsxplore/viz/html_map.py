@@ -40,11 +40,15 @@ def generate_html_map(
             continue
         url = row.get("browse_url")
         # Missing values read back from a vector file may be NaN rather than None.
-        popup = (
-            folium.Popup(f'<img src="{html.escape(url)}" width="200px">', max_width=250)
-            if isinstance(url, str)
-            else None
-        )
+        if isinstance(url, str):
+            url = html.escape(url)
+            # Bound both dimensions so long, narrow strips (e.g. KH-9 PC) keep a readable aspect ratio.
+            popup = folium.Popup(
+                f'<a href="{url}" target="_blank"><img src="{url}" style="max-width:500px;max-height:400px"></a>',
+                max_width=520,
+            )
+        else:
+            popup = None
         folium.GeoJson(row.geometry, tooltip=f"{first_col_name}: {row[first_col_name]}", popup=popup).add_to(m)
 
     if roi is not None:
