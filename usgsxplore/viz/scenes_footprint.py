@@ -51,25 +51,25 @@ def generate_scenes_footprint(
 
 
 def plot_footprints(ax, gdf_3857: gpd.GeoDataFrame, roi_3857: gpd.GeoDataFrame | None = None) -> int:
-    """Draw scene footprints in green (available) or red (unavailable), the ROI outline in cyan, and a legend.
+    """Draw scene footprints in blue (available) or orange (unavailable), the ROI outline in magenta, and a legend.
 
     Returns the number of available scenes.
     """
     # Unavailable first so available scenes are drawn on top where they overlap.
     available = available_column(gdf_3857).sort_values(kind="stable")
     gdf_3857 = gdf_3857.loc[available.index]
-    colors = available.map({True: "green", False: "red"}).to_numpy()
+    colors = available.map({True: "#0072B2", False: "#E69F00"}).to_numpy()
 
     gdf_3857.plot(ax=ax, color=colors, alpha=0.2, zorder=1)
     gdf_3857.boundary.plot(ax=ax, color=colors, linewidth=0.5, zorder=2)
     if roi_3857 is not None:
         # Not `.boundary`: a point ROI has an empty boundary and would vanish.
-        roi_3857.plot(ax=ax, facecolor="none", edgecolor="cyan", linewidth=1.5, zorder=3)
+        roi_3857.plot(ax=ax, facecolor="none", edgecolor="magenta", linewidth=1.5, zorder=3)
 
     ax.legend(
         handles=[
-            Patch(facecolor="green", edgecolor="green", alpha=0.5, label="Available"),
-            Patch(facecolor="red", edgecolor="red", alpha=0.5, label="Unavailable"),
+            Patch(facecolor="#0072B2", edgecolor="#0072B2", alpha=0.5, label="Available"),
+            Patch(facecolor="#E69F00", edgecolor="#E69F00", alpha=0.5, label="Unavailable"),
         ],
         loc="upper right",
     )

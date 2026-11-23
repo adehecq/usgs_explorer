@@ -7,6 +7,7 @@ import contextily as ctx
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import rasterio
 from rasterio.merge import merge
 from rasterio.plot import plotting_extent
@@ -111,9 +112,10 @@ def _generate_strip_figure(
 
         first_id = gdf.iloc[0].entity_id
         last_id = gdf.iloc[-1].entity_id
+        date = pd.to_datetime(gdf["acquisition_date"]).min().date()
         coverage_line = f"Coverage: {_compute_coverage(gdf_3857, roi_3857):.1f}%  |  " if roi_3857 is not None else ""
         fig.suptitle(
-            f"Strip {strip_id}\n{coverage_line}{first_id} → {last_id}",
+            f"Strip {strip_id} ({date})\n{coverage_line}{first_id} → {last_id}",
             fontsize=13,
             fontweight="bold",
             y=1.01,
