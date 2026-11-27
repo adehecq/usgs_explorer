@@ -4,6 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import pytest
+import rasterio
 
 from usgsxplore import utils
 
@@ -43,4 +44,9 @@ def test_download_browse(invoke, search_dir: Path, tmp_path: Path) -> None:
 
 def test_strip_viz(invoke, search_dir: Path, tmp_path: Path) -> None:
     invoke("viz", "strip", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path))
-    assert [p.name for p in tmp_path.glob("*.jpg")] == ["D3C1211-400739F.jpg"]
+    assert [p.name for p in tmp_path.glob("figures/*")] == ["D3C1211-400739F.jpg"]
+    assert [p.name for p in tmp_path.glob("mosaics/*")] == ["D3C1211-400739F.tif"]
+    assert sorted(p.stem for p in tmp_path.glob("scenes/*")) == ENTITY_IDS
+    assert gpd.read_file(tmp_path / "footprints.gpkg")["scene_path"].notna().all()
+    with rasterio.open(tmp_path / "mosaics" / "D3C1211-400739F.tif") as src:
+        assert src.read(1).any()

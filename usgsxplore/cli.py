@@ -269,15 +269,6 @@ def download(
     help="Output directory",
 )
 @click.option(
-    "--format",
-    "-f",
-    "fmt",
-    type=click.Choice(["tif", "jpg"], case_sensitive=False),
-    default="tif",
-    show_default=True,
-    help="Output image format.",
-)
-@click.option(
     "--max-workers",
     "-m",
     type=click.INT,
@@ -290,7 +281,6 @@ def download(
 def download_browse(
     vector_file: str,
     output_dir: str,
-    fmt: str,
     max_workers: int,
     overwrite: bool,
     hide_pbar: bool,
@@ -298,13 +288,12 @@ def download_browse(
     """
     Download individual browse images from a vector file.
 
-    Each scene is saved as a separate file (TIF or JPG) named after its entity_id.
-    TIF files are georeferenced using corner coordinate columns from the vector file.
+    Each scene is saved as a north-up GeoTIFF (EPSG:4326) named after its entity_id,
+    georeferenced using the corner coordinate columns from the vector file.
     """
     download_browse_images(
         vector_file,
         output_dir,
-        fmt=fmt,
         max_workers=max_workers,
         overwrite=overwrite,
         show_progress=not hide_pbar,
@@ -363,7 +352,7 @@ def load_scenes(vector_file: str, available_only: bool) -> gpd.GeoDataFrame:
     type=click.Path(dir_okay=True, resolve_path=True),
     default="./strip_viz/",
     show_default=True,
-    help="Output directory for the strip figures.",
+    help="Output directory for the figures, mosaics, scenes and footprints.",
 )
 @roi_options
 @click.option(
@@ -372,21 +361,10 @@ def load_scenes(vector_file: str, available_only: bool) -> gpd.GeoDataFrame:
     type=click.INT,
     default=4,
     show_default=True,
-    help="Number of strips rendered in parallel (one process each).",
+    help="Number of parallel download threads, then of figure rendering processes.",
 )
 @overwrite_option
 @available_only_option
-@click.option(
-    "--work-dir",
-    type=click.Path(dir_okay=True, resolve_path=True),
-    help="Directory where browse images are downloaded. [default: OUTPUT_DIR/browse_images]",
-)
-@click.option(
-    "--clean/--no-clean",
-    default=True,
-    show_default=True,
-    help="Delete downloaded browse images once figures are saved.",
-)
 def strip_viz(
     vector_file: str,
     output_dir: str,
@@ -394,15 +372,14 @@ def strip_viz(
     max_workers: int,
     overwrite: bool,
     available_only: bool,
-    work_dir: str | None,
-    clean: bool,
 ) -> None:
     """
     Generate one preview figure per strip from a vector file.
 
-    Scenes are grouped into strips by entity_id. For each strip, browse images are
-    downloaded and mosaicked, and a JPG figure named after the strip id is saved with
-    a mosaic view next to a context map (centered on the ROI if provided).
+    Scenes are grouped into strips by entity_id. Browse images are downloaded as GeoTIFFs
+    in scenes/, each strip gets a mosaic GeoTIFF in mosaics/ and a JPG figure in figures/ showing
+    the mosaic next to a context map (centered on the ROI if provided). footprints.gpkg
+    describes every scene. The mosaics and the footprints can be opened in a GIS.
     """
     from usgsxplore.viz.strip_figures import generate_strip_figures
 
@@ -412,8 +389,6 @@ def strip_viz(
         roi,
         max_workers=max_workers,
         overwrite=overwrite,
-        work_dir=work_dir,
-        clean_work_dir=clean,
     )
 
 
