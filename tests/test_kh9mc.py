@@ -41,16 +41,16 @@ def test_download_browse(invoke, search_dir: Path, tmp_path: Path) -> None:
     invoke("download-browse", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path), "--hide-pbar")
     assert sorted(p.stem for p in tmp_path.glob("*.tif")) == ENTITY_IDS
     with rasterio.open(tmp_path / f"{ENTITY_IDS[0]}.tif") as src:
-        gcps, crs = src.gcps
-        assert len(gcps) == 4
-        assert crs is not None
-
-
-def test_download_browse_jpg(invoke, search_dir: Path, tmp_path: Path) -> None:
-    invoke("download-browse", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path), "-f", "jpg", "--hide-pbar")
-    assert sorted(p.stem for p in tmp_path.glob("*.jpg")) == ENTITY_IDS
+        assert src.crs.to_epsg() == 4326
+        assert src.transform.is_rectilinear
+        assert src.nodata == 0
 
 
 def test_strip_viz(invoke, search_dir: Path, tmp_path: Path) -> None:
     invoke("viz", "strip", str(search_dir / "scenes.gpkg"), "-o", str(tmp_path))
-    assert [p.name for p in tmp_path.glob("*.jpg")] == ["DZB1212-500245L.jpg"]
+    assert [p.name for p in tmp_path.glob("figures/*")] == ["DZB1212-500245L.jpg"]
+    assert [p.name for p in tmp_path.glob("mosaics/*")] == ["DZB1212-500245L.tif"]
+    assert sorted(p.stem for p in tmp_path.glob("scenes/*")) == ENTITY_IDS
+    assert gpd.read_file(tmp_path / "footprints.gpkg")["scene_path"].notna().all()
+    with rasterio.open(tmp_path / "mosaics" / "DZB1212-500245L.tif") as src:
+        assert src.read(1).any()

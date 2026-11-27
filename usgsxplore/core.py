@@ -13,7 +13,7 @@ from pathlib import Path
 
 from usgsxplore import utils
 from usgsxplore.api import API
-from usgsxplore.browse import BrowseDownloader, JpgSaveStrategy, TifSaveStrategy
+from usgsxplore.browse import download_browse_images
 from usgsxplore.errors import FilterFieldError, FilterValueError, USGSInvalidDataset
 from usgsxplore.filter import SceneFilter
 from usgsxplore.scene_downloader import SceneDownloader
@@ -206,51 +206,6 @@ def download_scenes(
                 show_progress=show_progress,
                 extract=extract,
             )
-
-
-def download_browse_images(
-    source: str,
-    output_dir: str,
-    fmt: str = "tif",
-    max_workers: int = 4,
-    overwrite: bool = False,
-    show_progress: bool = True,
-) -> list[Path]:
-    """
-    Download browse (preview) images from a vector file or GeoDataFrame.
-
-    Each scene is saved as an individual file named after its ``entity_id``.
-
-    Parameters
-    ----------
-    source : str
-        Path to the input vector file (any format supported by geopandas).
-    output_dir : str
-        Directory where downloaded images are saved.
-    fmt : str, default "tif"
-        Output format: ``"tif"`` (georeferenced GeoTIFF) or ``"jpg"``.
-    max_workers : int, default 4
-        Number of parallel download threads.
-    overwrite : bool, default False
-        If True, overwrite existing files.
-    show_progress : bool, default True
-        Whether to display a progress bar during download.
-
-    Returns
-    -------
-    list[Path]
-        Paths of the available images (downloaded or already existing), in `source` order.
-        Scenes whose download failed are omitted.
-    """
-    strategy = TifSaveStrategy() if fmt == "tif" else JpgSaveStrategy()
-    downloader = BrowseDownloader(
-        output_dir,
-        strategy,
-        overwrite=overwrite,
-        max_workers=max_workers,
-        show_progress=show_progress,
-    )
-    return downloader.download(source)
 
 
 def list_datasets(username: str | None = None, token: str | None = None, show_all: bool = False) -> list[str]:

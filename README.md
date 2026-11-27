@@ -131,28 +131,23 @@ The `.txt` file header line `#dataset=<name>` is read automatically, so passing 
 
 ### `download-browse`
 
-Download individual browse (preview) images from a vector file. Each scene is saved as a separate file named after its `entity_id`.
+Download individual browse (preview) images from a vector file. Each scene is saved as a separate GeoTIFF named after its `entity_id`.
 
 ```bash
 usgsxplore download-browse [OPTIONS] VECTOR_FILE
 ```
 
-TIF files are georeferenced using corner coordinate columns from the vector file. JPG files are saved without georeferencing.
+Images are warped to a north-up grid in EPSG:4326, using the corner coordinate columns from the vector file.
 
 | Option | Description |
 |--------|-------------|
 | `-o / --output-dir` | Output directory (default: `./browse_images/`) |
-| `-f / --format` | Output format: `tif` (default) or `jpg` |
 | `-m / --max-workers` | Parallel download threads (default: 4) |
 | `--overwrite` | Overwrite existing files |
 | `--hide-pbar` | Hide progress bar |
 
 ```bash
-# Download as georeferenced GeoTIFF (default)
 usgsxplore download-browse results.gpkg -o ./previews/
-
-# Download as JPEG
-usgsxplore download-browse results.gpkg -o ./previews/ --format jpg
 ```
 
 ### `viz`
@@ -168,7 +163,7 @@ usgsxplore viz COMMAND [OPTIONS] VECTOR_FILE
 | `map` | Interactive HTML map, with the browse image in each popup (default: `scenes_map.html`) |
 | `footprint` | Scene footprints over a satellite basemap, as PNG/JPG (default: `scenes_footprint.png`) |
 | `density` | Scene overlap density over a satellite basemap, as PNG/JPG (default: `scenes_density.png`) |
-| `strip` | One `<strip_id>.jpg` per strip: browse-image mosaic next to a context map (default dir: `./strip_viz/`) |
+| `strip` | Per strip, a browse-image mosaic (GeoTIFF) and a figure with a context map (default dir: `./strip_viz/`) |
 
 Options shared by every `viz` command:
 
@@ -184,14 +179,26 @@ Only one ROI option can be given. `map`, `footprint` and `density` take `-o / --
 
 | Option | Description |
 |--------|-------------|
-| `-m / --max-workers` | Strips rendered in parallel (default: 4) |
-| `--work-dir` | Where browse images are downloaded (default: `OUTPUT_DIR/browse_images`) |
-| `--clean / --no-clean` | Delete downloaded browse images once figures are saved (default: on) |
+| `-m / --max-workers` | Parallel download threads and figure rendering processes (default: 4) |
 
 ```bash
 usgsxplore viz map results.gpkg -o map.html --roi-bbox 5.5 45 6 45.5
-usgsxplore viz strip results.gpkg -o ./strips/ -roi roi.geojson --no-clean
+usgsxplore viz strip results.gpkg -o ./strips/ -roi roi.geojson
 ```
+
+`viz strip` produces the following files, which can also be opened in QGIS:
+
+```
+strips/
+├── footprints.gpkg          # all scenes, with their strip_id and scene_path (empty if the download failed)
+├── figures/<strip_id>.jpg
+├── mosaics/<strip_id>.tif   # mosaic of the strip, in EPSG:4326
+└── scenes/<entity_id>.tif   # browse images, in EPSG:4326
+```
+
+Existing scenes are reused, while mosaics and footprints are rebuilt at each run. `footprints.gpkg` only describes the
+scenes of the last run. `--overwrite` regenerates the figures; to download the scenes again, use
+`download-browse --overwrite -o ./strips/scenes/`.
 
 See [docs/figures.md](docs/figures.md) for example outputs.
 
@@ -296,17 +303,7 @@ download_scenes(
 ### Browse images
 
 ```python
-# Download as georeferenced GeoTIFF (default)
-download_browse_images("results.gpkg", output_dir="./previews")
-
-# Download as JPEG
-download_browse_images("results.gpkg", output_dir="./previews", fmt="jpg")
-
-# Advanced: use BrowseDownloader directly with a custom strategy
-from usgsxplore.browse import BrowseDownloader, TifSaveStrategy, JpgSaveStrategy
-
-downloader = BrowseDownloader("./previews", TifSaveStrategy(), max_workers=8)
-downloader.download("results.gpkg")
+download_browse_images("results.gpkg", output_dir="./previews", max_workers=8)
 ```
 
 ### Figures

@@ -1,7 +1,5 @@
-from __future__ import annotations
-
+import logging
 import warnings
-from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from io import BytesIO
 from pathlib import Path
@@ -10,284 +8,142 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import requests
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
+from pyproj import Geod
 from rasterio.control import GroundControlPoint
-from rasterio.crs import CRS
 from rasterio.errors import NotGeoreferencedWarning
+from rasterio.transform import GCPTransformer, from_origin
+from rasterio.warp import Resampling, reproject
 from tqdm import tqdm
 
-__all__ = [
-    "BrowseDownloader",
-    "JpgSaveStrategy",
-    "SaveStrategy",
-    "TifSaveStrategy",
-    "fetch_browse_img",
-]
+from usgsxplore.utils import as_gdf
 
-#############################################################################################
-#                           STRATEGY PATTERN — SAVE BACKENDS
-#############################################################################################
+__all__ = ["download_browse_images"]
 
+CRS = "EPSG:4326"
+METERS_PER_DEGREE = 111_320
 
-class SaveStrategy(ABC):
-    """Abstract base class for image save strategies used by BrowseDownloader."""
-
-    @property
-    @abstractmethod
-    def extension(self) -> str:
-        """File extension produced by this strategy (without leading dot)."""
-
-    @abstractmethod
-    def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
-        """
-        Persist `img` to `output_path`.
-
-        Parameters
-        ----------
-        img : np.ndarray
-            Image array (H, W) for grayscale or (H, W, C) for color.
-        row : dict
-            Scene metadata row (may be used for georeferencing).
-        output_path : Path
-            Destination file path (parent directory already exists).
-        """
+# rasterio also forwards transformer options to the warper, which logs a spurious warning for each of them.
+logging.getLogger("rasterio._env").addFilter(lambda record: "SRC_METHOD" not in record.getMessage())
+# The in-memory source of the warp is georeferenced by GCPs, which rasterio applies after raising this.
+warnings.filterwarnings("ignore", category=NotGeoreferencedWarning, module="rasterio.warp")
 
 
-class TifSaveStrategy(SaveStrategy):
+def download_browse_images(
+    source: str | Path | gpd.GeoDataFrame,
+    output_dir: str | Path,
+    max_workers: int = 4,
+    overwrite: bool = False,
+    show_progress: bool = True,
+) -> list[Path]:
+    """Download the browse image of each scene as a north-up GeoTIFF named `<entity_id>.tif`.
+
+    :param source: vector file or GeoDataFrame with `entity_id`, `browse_url` and `*_corner_*_dec` columns
+    :param output_dir: directory where the GeoTIFFs are saved
+    :param max_workers: number of parallel download threads
+    :param overwrite: if True, download again the images that already exist
+    :param show_progress: if True, display a progress bar
+    :return: paths of the available images in `source` order, without the failed scenes
     """
-    Save a browse image as a GeoTIFF georeferenced by its four corner GCPs.
+    gdf = as_gdf(source)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    The image is not warped: GIS tools apply the GCPs on the fly, which handles
-    non-rectangular scenes.
+    paths = [output_dir / f"{entity_id}.tif" for entity_id in gdf["entity_id"]]
+    failed = set()
+    with requests.Session() as session, ThreadPoolExecutor(max_workers) as executor:
+        futures = {
+            executor.submit(_download_scene, row, path, session): path
+            for row, path in zip(gdf.to_dict("records"), paths)
+            if overwrite or not path.exists()
+        }
+        for future in tqdm(
+            as_completed(futures), total=len(futures), desc="Downloading browse images", disable=not show_progress
+        ):
+            try:
+                future.result()
+            except Exception as e:
+                failed.add(futures[future])
+                tqdm.write(f"[WARN] {futures[future].stem}: {e}")
 
-    Requires the scene row to contain corner coordinate columns:
-    ``nw/ne/se/sw_corner_long_dec`` and ``nw/ne/se/sw_corner_lat_dec``.
+    return [path for path in paths if path not in failed]
 
-    Parameters
-    ----------
-    crs : CRS or None, default None
-        CRS for the output raster. Defaults to EPSG:4326 (WGS84).
-    **creation_opts
-        Rasterio creation options. Override the defaults:
-        ``compress="jpeg", jpeg_quality=60``.
+
+def _download_scene(row: dict, output_file: Path, session: requests.Session) -> None:
+    """Fetch the browse image of one scene in grayscale and save it as a warped GeoTIFF."""
+    response = session.get(row["browse_url"], timeout=10)
+    response.raise_for_status()
+    with Image.open(BytesIO(response.content)) as jpg:
+        img = np.array(jpg.convert("L"))
+
+    corners = ("nw", "ne", "se", "sw")
+    lons = np.array([row[f"{c}_corner_long_dec"] for c in corners], dtype=float)
+    lats = np.array([row[f"{c}_corner_lat_dec"] for c in corners], dtype=float)
+    # A scene crossing the antimeridian would otherwise span the whole globe.
+    if np.ptp(lons) > 180:
+        lons[lons < 0] += 360
+
+    height, width = img.shape
+    pixels = [(0, 0), (0, width), (height, width), (height, 0)]
+    gcps = [GroundControlPoint(r, c, x, y) for (r, c), x, y in zip(pixels, lons, lats)]
+    _save_warped_tif(img, gcps, output_file)
+
+
+def _output_grid(gcps: list[GroundControlPoint], width: int, height: int):
+    """Return the transform and (height, width) shape of the north-up grid covering the warped image.
+
+    `gcps` are the four image corners, in clockwise order from the top-left one.
     """
+    lons, lats = [g.x for g in gcps], [g.y for g in gcps]
+    # Edge lengths in meters, in the order top, right, bottom, left.
+    edges = Geod(ellps="WGS84").line_lengths([*lons, lons[0]], [*lats, lats[0]])
+    # The finest of the four edge resolutions, so that no detail is lost.
+    pixel_size = min(length / count for length, count in zip(edges, (width, height, width, height)))
+    yres = pixel_size / METERS_PER_DEGREE
+    xres = yres / np.cos(np.radians(np.mean(lats)))
 
-    extension = "tif"
+    # The spline can bend the image edges beyond the bounds of the corners.
+    cols, rows = np.linspace(0, width, 50), np.linspace(0, height, 50)
+    outline_cols = np.concatenate([cols, cols, np.zeros(50), np.full(50, width)])
+    outline_rows = np.concatenate([np.zeros(50), np.full(50, height), rows, rows])
+    with GCPTransformer(gcps, tps=True) as transformer:
+        xs, ys = transformer.xy(outline_rows, outline_cols, offset="ul")
 
-    def __init__(self, crs: CRS | None = None, **creation_opts) -> None:
-        self.crs = crs if crs is not None else CRS.from_epsg(4326)
-        self.creation_opts = {"compress": "jpeg", "jpeg_quality": 60, **creation_opts}
-
-    def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
-        if img.ndim == 2:
-            height, width = img.shape
-            count = 1
-            img_bands = img[np.newaxis, ...]
-        else:
-            height, width, count = img.shape[0], img.shape[1], img.shape[2]
-            img_bands = np.moveaxis(img, -1, 0)
-
-        gcps = [
-            GroundControlPoint(row=0, col=0, x=float(row["nw_corner_long_dec"]), y=float(row["nw_corner_lat_dec"])),
-            GroundControlPoint(row=0, col=width, x=float(row["ne_corner_long_dec"]), y=float(row["ne_corner_lat_dec"])),
-            GroundControlPoint(
-                row=height, col=width, x=float(row["se_corner_long_dec"]), y=float(row["se_corner_lat_dec"])
-            ),
-            GroundControlPoint(
-                row=height, col=0, x=float(row["sw_corner_long_dec"]), y=float(row["sw_corner_lat_dec"])
-            ),
-        ]
-
-        with warnings.catch_warnings():
-            warnings.filterwarnings("ignore", category=NotGeoreferencedWarning)
-            with rasterio.open(
-                output_path,
-                "w",
-                driver="GTiff",
-                width=width,
-                height=height,
-                count=count,
-                dtype=img.dtype,
-                **self.creation_opts,
-            ) as dst:
-                dst.write(img_bands)
-                dst.gcps = (gcps, self.crs)
+    west, north = min(xs), max(ys)
+    shape = int(np.ceil((north - min(ys)) / yres)), int(np.ceil((max(xs) - west) / xres))
+    return from_origin(west, north, xres, yres), shape
 
 
-class JpgSaveStrategy(SaveStrategy):
-    """
-    Save a browse image as a JPEG file (no georeferencing).
+def _save_warped_tif(img: np.ndarray, gcps: list[GroundControlPoint], output_file: Path) -> None:
+    """Warp a grayscale image with a thin plate spline and write it as a GeoTIFF with 0 as nodata."""
+    transform, shape = _output_grid(gcps, img.shape[1], img.shape[0])
+    warped = np.zeros(shape, dtype=img.dtype)
+    reproject(
+        np.maximum(img, 1),  # 0 is reserved for nodata
+        warped,
+        gcps=gcps,
+        src_crs=CRS,
+        dst_crs=CRS,
+        dst_transform=transform,
+        dst_nodata=0,
+        resampling=Resampling.bilinear,
+        SRC_METHOD="GCP_TPS",
+    )
 
-    Parameters
-    ----------
-    quality : int, default 60
-        JPEG compression quality (1–95).
-    """
-
-    extension = "jpg"
-
-    def __init__(self, quality: int = 60) -> None:
-        self.quality = quality
-
-    def save(self, img: np.ndarray, row: dict, output_path: Path) -> None:
-        Image.fromarray(img).save(output_path, format="JPEG", quality=self.quality)
-
-
-#############################################################################################
-#                           DOWNLOADER
-#############################################################################################
-
-
-class BrowseDownloader:
-    """
-    Download individual browse (preview) images from a GeoDataFrame or shapefile.
-
-    Uses a pluggable :class:`SaveStrategy` to control the output format.
-    Downloads run in parallel via a thread pool.
-
-    Parameters
-    ----------
-    output_dir : str or Path
-        Directory where images will be saved.
-    strategy : SaveStrategy
-        Save backend that determines the output format. Use :class:`TifSaveStrategy`
-        for georeferenced GeoTIFFs or :class:`JpgSaveStrategy` for plain JPEGs.
-    url_key : str, default "browse_url"
-        Column name containing browse image URLs.
-    name_key : str, default "entity_id"
-        Column name used to derive output filenames.
-    grayscale : bool, default True
-        If True, download images as grayscale.
-    overwrite : bool, default False
-        If True, overwrite existing files.
-    max_workers : int, default 4
-        Number of parallel download threads.
-    show_progress : bool, default True
-        If True, display a tqdm progress bar.
-
-    Examples
-    --------
-    Download as georeferenced GeoTIFF:
-
-        downloader = BrowseDownloader("output/", TifSaveStrategy())
-        downloader.download("scenes.gpkg")
-
-    Download as JPEG from a GeoDataFrame:
-
-        downloader = BrowseDownloader("output/", JpgSaveStrategy(quality=90))
-        downloader.download(gdf)
-    """
-
-    def __init__(
-        self,
-        output_dir: str | Path,
-        strategy: SaveStrategy,
-        url_key: str = "browse_url",
-        name_key: str = "entity_id",
-        grayscale: bool = True,
-        overwrite: bool = False,
-        max_workers: int = 4,
-        show_progress: bool = True,
-    ) -> None:
-        self.output_dir = Path(output_dir)
-        self.strategy = strategy
-        self.url_key = url_key
-        self.name_key = name_key
-        self.grayscale = grayscale
-        self.overwrite = overwrite
-        self.max_workers = max_workers
-        self.show_progress = show_progress
-
-    def download(self, source: str | Path | gpd.GeoDataFrame) -> list[Path]:
-        """
-        Download browse images for all scenes in `source`.
-
-        Parameters
-        ----------
-        source : str, Path, or GeoDataFrame
-            Input vector file or GeoDataFrame with at least `url_key` and `name_key` columns.
-
-        Returns
-        -------
-        list[Path]
-            Paths of the available images (downloaded or already existing), in `source` order.
-            Scenes whose download failed are omitted.
-        """
-        if isinstance(source, (str, Path)):
-            gdf = gpd.read_file(source)
-        else:
-            gdf = source
-
-        self.output_dir.mkdir(parents=True, exist_ok=True)
-
-        output_paths: list[Path] = []
-        failed: set[Path] = set()
-        with requests.Session() as session, ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            futures: dict = {}
-            for _, row in gdf.iterrows():
-                output_path = self.output_dir / f"{row[self.name_key]}.{self.strategy.extension}"
-                output_paths.append(output_path)
-                if output_path.exists() and not self.overwrite:
-                    continue
-                fut = executor.submit(self._download_one, row.to_dict(), output_path, session)
-                futures[fut] = output_path
-
-            for fut in tqdm(
-                as_completed(futures),
-                total=len(futures),
-                desc="Downloading browse images",
-                disable=not self.show_progress,
-            ):
-                try:
-                    fut.result()
-                except Exception as e:
-                    failed.add(futures[fut])
-                    print(f"Error for {futures[fut].stem}: {e}")
-
-        return [p for p in output_paths if p not in failed]
-
-    def _download_one(self, row: dict, output_path: Path, session: requests.Session) -> None:
-        img = fetch_browse_img(row[self.url_key], grayscale=self.grayscale, session=session)
-        self.strategy.save(img, row, output_path)
-
-
-#############################################################################################
-#                           OTHER PUBLIC FUNCTIONS
-#############################################################################################
-
-
-def fetch_browse_img(url: str, grayscale: bool = True, session: requests.Session | None = None) -> np.ndarray:
-    """
-    Download a browse image from a URL and return it as a NumPy array.
-
-    Parameters
-    ----------
-    url : str
-        URL of the browse image.
-    grayscale : bool, default True
-        If True, convert the image to grayscale (single channel).
-    session : requests.Session or None
-        Optional session for connection pooling. Falls back to `requests` module if None.
-
-    Returns
-    -------
-    np.ndarray
-        Image array of shape (H, W) for grayscale or (H, W, C) for color.
-    """
-    client = session or requests
-
-    try:
-        response = client.get(url, timeout=10)
-        response.raise_for_status()
-    except requests.RequestException as e:
-        raise requests.HTTPError(f"Failed to download image from {url}") from e
-
-    try:
-        with Image.open(BytesIO(response.content)) as img:
-            if grayscale:
-                img = img.convert("L")
-            arr = np.array(img)
-    except UnidentifiedImageError as e:
-        raise ValueError(f"Failed to decode image from {url}") from e
-
-    return arr
+    # Existing files are not downloaded again, so an interrupted write must not leave one behind.
+    tmp_file = output_file.with_suffix(".tmp")
+    with rasterio.open(
+        tmp_file,
+        "w",
+        driver="GTiff",
+        height=shape[0],
+        width=shape[1],
+        count=1,
+        dtype=warped.dtype,
+        crs=CRS,
+        transform=transform,
+        nodata=0,
+        compress="deflate",
+    ) as dst:
+        dst.write(warped, 1)
+    tmp_file.replace(output_file)
